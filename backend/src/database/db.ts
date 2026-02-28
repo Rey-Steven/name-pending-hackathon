@@ -274,14 +274,16 @@ export const TaskDB = {
   },
 
   findPending: async (targetAgent: string): Promise<Task[]> => {
-    // Requires composite index: target_agent ASC, status ASC, priority DESC, created_at ASC
     const snap = await fdb().collection('tasks')
       .where('target_agent', '==', targetAgent)
-      .where('status', '==', 'pending')
-      .orderBy('priority', 'desc')
-      .orderBy('created_at', 'asc')
       .get();
-    return snapToDocs<Task>(snap);
+    return snapToDocs<Task>(snap)
+      .filter(t => t.status === 'pending')
+      .sort((a, b) => {
+        const pDiff = (b.priority ?? 0) - (a.priority ?? 0);
+        if (pDiff !== 0) return pDiff;
+        return (a.created_at || '').localeCompare(b.created_at || '');
+      });
   },
 
   update: async (id: string, updates: Partial<Task>): Promise<void> => {
