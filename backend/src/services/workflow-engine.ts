@@ -4,7 +4,8 @@ import { LegalAgent } from '../agents/legal-agent';
 import { AccountingAgent } from '../agents/accounting-agent';
 import { EmailAgent } from '../agents/email-agent';
 import { TaskQueue } from './task-queue';
-import { DealDB, LeadDB, AuditLog, CompanyProfileDB } from '../database/db';
+import { DealDB, LeadDB, AuditLog, CompanyProfileDB, Lead } from '../database/db';
+import { generateOfferPDF } from './pdf-generator';
 import { broadcastEvent } from '../routes/dashboard.routes';
 import { CompanyProfileContext } from '../types';
 
@@ -247,7 +248,7 @@ export class WorkflowEngine {
         message: `Lead engaged — conversation ongoing` };
     }
 
-    // ─── WANTS OFFER / COUNTER / NEW OFFER: Send formal offer ────
+    // ─── WANTS OFFER / COUNTER / NEW OFFER: Send formal offer with PDF ────
     if (action === 'wants_offer' || action === 'counter' || action === 'new_offer') {
       const offerUpdates: any = { status: 'offer_sent', negotiation_round: roundNumber };
 
@@ -263,6 +264,18 @@ export class WorkflowEngine {
       if (analysis.data.offerSummary) offerUpdates.sales_notes = analysis.data.offerSummary;
 
       await DealDB.update(dealId, offerUpdates);
+
+      // Generate PDF offer — required, do not send email without it
+      const updatedDeal = await DealDB.findById(dealId);
+      if (!updatedDeal) throw new Error(`Deal ${dealId} not found after update`);
+
+      const companyProfile = await CompanyProfileDB.get();
+      if (!companyProfile) throw new Error('Company profile not configured — cannot generate offer PDF');
+
+      const pdfBuffer = await generateOfferPDF({ deal: updatedDeal, lead: lead as Lead, companyProfile });
+      const refId = dealId.slice(0, 8).toUpperCase();
+      console.log(`  📎 PDF offer generated (${(pdfBuffer.length / 1024).toFixed(1)} KB)`);
+
       await emailAgent.deliver({
         to: lead.contact_email!,
         subject: analysis.data.replySubject,
@@ -272,6 +285,7 @@ export class WorkflowEngine {
         emailType: 'proposal',
         inReplyTo: reply.messageId,
         references: reply.references ? `${reply.references} ${reply.messageId}` : reply.messageId,
+        attachments: [{ filename: `Prosfora-${refId}.pdf`, content: pdfBuffer }],
       });
 
       const label = action === 'wants_offer' ? 'Offer sent' : action === 'counter' ? 'Counter-offer sent' : 'New offer sent';
@@ -279,7 +293,7 @@ export class WorkflowEngine {
 
       broadcastEvent({
         type: 'workflow_completed', agent: 'sales', dealId, leadId: deal.lead_id,
-        message: `${label} — round ${roundNumber}`,
+        message: `${label} — round ${roundNumber} (PDF attached)`,
         timestamp: new Date().toISOString(),
       });
 

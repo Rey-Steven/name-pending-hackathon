@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
-import { DealDB, LeadDB, InvoiceDB, LegalValidationDB, TaskDB } from '../database/db';
+import { DealDB, LeadDB, InvoiceDB, LegalValidationDB, TaskDB, CompanyProfileDB } from '../database/db';
+import { generateOfferPDF } from '../services/pdf-generator';
 
 const router = Router();
 
@@ -32,6 +33,44 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     res.json({ ...deal, lead, invoice, legalValidation, tasks });
   } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/deals/:id/pdf - Download offer PDF
+router.get('/:id/pdf', async (req: Request, res: Response) => {
+  try {
+    const dealId = req.params.id;
+    const deal = await DealDB.findById(dealId);
+    if (!deal) {
+      return res.status(404).json({ error: 'Deal not found' });
+    }
+
+    if (!deal.subtotal || deal.subtotal === 0) {
+      return res.status(400).json({ error: 'Deal has no pricing yet — offer PDF not available until the customer expresses interest' });
+    }
+
+    const lead = await LeadDB.findById(deal.lead_id);
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead not found for this deal' });
+    }
+
+    const companyProfile = await CompanyProfileDB.get();
+    if (!companyProfile) {
+      return res.status(500).json({ error: 'Company profile not configured' });
+    }
+
+    const pdfBuffer = await generateOfferPDF({ deal, lead, companyProfile });
+
+    const refId = dealId.slice(0, 8).toUpperCase();
+    const filename = `Prosfora-${refId}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+  } catch (error: any) {
+    console.error('PDF generation error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
