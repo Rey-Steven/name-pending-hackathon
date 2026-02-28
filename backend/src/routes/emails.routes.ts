@@ -1,8 +1,34 @@
 import { Router, Request, Response } from 'express';
-import { EmailDB, DealDB, LeadDB, TaskDB } from '../database/db';
-import { fetchInbox, fetchUnread, fetchReplies, sendRealEmail } from '../services/email-transport';
+import { EmailDB, DealDB, LeadDB, TaskDB, CompanyProfileDB } from '../database/db';
+import { EmailAgent } from '../agents/email-agent';
+import { CompanyProfileContext } from '../types';
 
 const router = Router();
+
+async function getEmailAgent(): Promise<EmailAgent> {
+  const profile = await CompanyProfileDB.get();
+  if (!profile) return new EmailAgent(null);
+  try {
+    const agentContexts = JSON.parse(profile.agent_context_json || '{}');
+    const ctx: CompanyProfileContext = {
+      id: 'main',
+      name: profile.name,
+      website: profile.website,
+      logo_path: profile.logo_path,
+      industry: profile.industry,
+      description: profile.description,
+      business_model: profile.business_model,
+      target_customers: profile.target_customers,
+      products_services: profile.products_services,
+      geographic_focus: profile.geographic_focus,
+      agentContexts,
+      kad_codes: profile.kad_codes,
+    };
+    return new EmailAgent(ctx);
+  } catch {
+    return new EmailAgent(null);
+  }
+}
 
 // GET /api/emails - Get all sent emails from our database
 router.get('/', async (_req: Request, res: Response) => {
@@ -18,7 +44,8 @@ router.get('/', async (_req: Request, res: Response) => {
 router.get('/inbox', async (req: Request, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 20;
-    const emails = await fetchInbox(limit);
+    const emailAgent = await getEmailAgent();
+    const emails = await emailAgent.getInbox(limit);
     res.json({ count: emails.length, emails });
   } catch (error: any) {
     console.error('Inbox fetch error:', error.message);
@@ -29,7 +56,8 @@ router.get('/inbox', async (req: Request, res: Response) => {
 // GET /api/emails/unread - Fetch only unread emails from inbox
 router.get('/unread', async (_req: Request, res: Response) => {
   try {
-    const emails = await fetchUnread();
+    const emailAgent = await getEmailAgent();
+    const emails = await emailAgent.getUnread();
     res.json({ count: emails.length, emails });
   } catch (error: any) {
     console.error('Unread fetch error:', error.message);
@@ -115,7 +143,8 @@ router.get('/threads', async (_req: Request, res: Response) => {
 // GET /api/emails/replies - Fetch replies matched to our sent emails
 router.get('/replies', async (_req: Request, res: Response) => {
   try {
-    const replies = await fetchReplies();
+    const emailAgent = await getEmailAgent();
+    const replies = await emailAgent.getReplies();
     res.json({ count: replies.length, replies });
   } catch (error: any) {
     console.error('Replies fetch error:', error.message);
@@ -134,10 +163,8 @@ router.post('/reply/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Email not found' });
     }
 
-    const { ReplyProcessor } = await import('../agents/reply-processor');
-    const processor = new ReplyProcessor();
-
-    const result = await processor.processReply({
+    const emailAgent = await getEmailAgent();
+    const result = await emailAgent.processReply({
       originalEmail: sentEmail,
       customerReply: customMessage || 'Follow-up requested',
       dealId: sentEmail.deal_id,
@@ -153,10 +180,8 @@ router.post('/reply/:id', async (req: Request, res: Response) => {
 // POST /api/emails/check-replies - Check inbox for new replies and auto-process them
 router.post('/check-replies', async (_req: Request, res: Response) => {
   try {
-    const { ReplyProcessor } = await import('../agents/reply-processor');
-    const processor = new ReplyProcessor();
-
-    const results = await processor.checkAndProcessReplies();
+    const emailAgent = await getEmailAgent();
+    const results = await emailAgent.checkAndProcessReplies();
 
     res.json({
       success: true,

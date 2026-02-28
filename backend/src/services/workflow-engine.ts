@@ -2,12 +2,11 @@ import { MarketingAgent } from '../agents/marketing-agent';
 import { SalesAgent } from '../agents/sales-agent';
 import { LegalAgent } from '../agents/legal-agent';
 import { AccountingAgent } from '../agents/accounting-agent';
-import { EmailService } from '../agents/email-service';
+import { EmailAgent } from '../agents/email-agent';
 import { TaskQueue } from './task-queue';
-import { DealDB, LeadDB, AuditLog, EmailDB, CompanyProfileDB } from '../database/db';
+import { DealDB, LeadDB, AuditLog, CompanyProfileDB } from '../database/db';
 import { broadcastEvent } from '../routes/dashboard.routes';
 import { CompanyProfileContext } from '../types';
-import { fetchRepliesForDeal, sendRealEmail } from './email-transport';
 
 async function loadCompanyProfile(): Promise<CompanyProfileContext | null> {
   const raw = await CompanyProfileDB.get();
@@ -47,7 +46,7 @@ export class WorkflowEngine {
       salesAgent: new SalesAgent(companyProfile),
       legalAgent: new LegalAgent(companyProfile),
       accountingAgent: new AccountingAgent(companyProfile),
-      emailService: new EmailService(companyProfile),
+      emailAgent: new EmailAgent(companyProfile),
     };
   }
 
@@ -56,7 +55,7 @@ export class WorkflowEngine {
   async startWorkflow(leadId: string) {
     const startTime = Date.now();
 
-    const { companyProfile, marketingAgent, salesAgent, emailService } = await this.createAgents();
+    const { companyProfile, marketingAgent, salesAgent, emailAgent } = await this.createAgents();
 
     console.log('\n' + '═'.repeat(60));
     console.log('  🚀 WORKFLOW — Lead to Cold Outreach');
@@ -93,7 +92,7 @@ export class WorkflowEngine {
 
         await TaskQueue.startProcessing(task.id!);
         try {
-          await emailService.sendEmail(
+          await emailAgent.sendEmail(
             taskData.parsedInput.leadId,
             taskData.parsedInput.emailType || 'cold_outreach',
             {
@@ -184,7 +183,7 @@ export class WorkflowEngine {
     const lead = await LeadDB.findById(deal.lead_id);
     if (!lead) throw new Error(`Lead ${deal.lead_id} not found`);
 
-    const { salesAgent } = await this.createAgents();
+    const { salesAgent, emailAgent } = await this.createAgents();
 
     // Normalize legacy statuses to new stage names for the agent
     const effectiveStage =
@@ -195,7 +194,7 @@ export class WorkflowEngine {
     console.log(`  📋 Deal #${dealId} — ${lead.company_name} (${effectiveStage})`);
     console.log('═'.repeat(60));
 
-    const reply = await fetchRepliesForDeal(dealId);
+    const reply = await emailAgent.getRepliesForDeal(dealId);
 
     if (!reply) {
       console.log('\n  📭 No reply found yet');
@@ -206,21 +205,7 @@ export class WorkflowEngine {
     console.log(`     Preview: ${reply.body.slice(0, 120)}...`);
 
     // Store inbound reply (deduplicate by message_id)
-    const existingInbound = await EmailDB.findByMessageId(reply.messageId);
-    if (!existingInbound) {
-      await EmailDB.create({
-        deal_id: dealId,
-        recipient_email: process.env.GMAIL_USER || '',
-        recipient_name: 'AgentFlow',
-        sender_email: reply.from,
-        subject: reply.subject,
-        body: reply.body,
-        email_type: 'follow_up',
-        direction: 'inbound',
-        message_id: reply.messageId,
-        status: 'sent',
-      });
-    }
+    await emailAgent.storeInboundReply(reply, dealId);
 
     const roundNumber = (deal.negotiation_round || 0) + 1;
 
@@ -236,34 +221,19 @@ export class WorkflowEngine {
 
     const { action } = analysis.data;
 
-    // ─── Helper: save outbound email to DB ───────────────────────
-    const saveOutbound = async (type: string) => {
-      const sendResult = await sendRealEmail({
-        to: lead.contact_email!,
-        subject: analysis.data.replySubject,
-        body: analysis.data.replyBody,
-      });
-      await EmailDB.create({
-        deal_id: dealId,
-        recipient_email: lead.contact_email!,
-        recipient_name: lead.contact_name,
-        subject: analysis.data.replySubject,
-        body: analysis.data.replyBody,
-        email_type: type as any,
-        direction: 'outbound',
-        message_id: sendResult.messageId,
-        status: sendResult.sent ? 'sent' : 'failed',
-        error_message: sendResult.error,
-      });
-      return sendResult;
-    };
-
     const duration = Date.now() - startTime;
 
     // ─── ENGAGED: Lead showed interest, keep talking ─────────────
     if (action === 'engaged') {
       await DealDB.update(dealId, { status: 'in_pipeline', negotiation_round: roundNumber });
-      await saveOutbound('follow_up');
+      await emailAgent.deliver({
+        to: lead.contact_email!,
+        subject: analysis.data.replySubject,
+        body: analysis.data.replyBody,
+        dealId,
+        recipientName: lead.contact_name,
+        emailType: 'follow_up',
+      });
 
       broadcastEvent({
         type: 'workflow_completed', agent: 'sales', dealId, leadId: deal.lead_id,
@@ -291,7 +261,14 @@ export class WorkflowEngine {
       if (analysis.data.offerSummary) offerUpdates.sales_notes = analysis.data.offerSummary;
 
       await DealDB.update(dealId, offerUpdates);
-      await saveOutbound('proposal');
+      await emailAgent.deliver({
+        to: lead.contact_email!,
+        subject: analysis.data.replySubject,
+        body: analysis.data.replyBody,
+        dealId,
+        recipientName: lead.contact_name,
+        emailType: 'proposal',
+      });
 
       const label = action === 'wants_offer' ? 'Offer sent' : action === 'counter' ? 'Counter-offer sent' : 'New offer sent';
       console.log(`\n  💰 ${label} — €${analysis.data.offerTotalAmount || deal.total_amount}`);
@@ -313,7 +290,14 @@ export class WorkflowEngine {
 
       await DealDB.update(dealId, { status: 'closed_won', negotiation_round: roundNumber });
       await LeadDB.update(deal.lead_id, { status: 'converted' });
-      await saveOutbound('confirmation');
+      await emailAgent.deliver({
+        to: lead.contact_email!,
+        subject: analysis.data.replySubject,
+        body: analysis.data.replyBody,
+        dealId,
+        recipientName: lead.contact_name,
+        emailType: 'confirmation',
+      });
 
       const completionResult = await this.completeWorkflow(dealId, deal.lead_id, deal);
 
@@ -337,7 +321,14 @@ export class WorkflowEngine {
       sales_notes: `CLOSED LOST: ${analysis.data.failureReason || analysis.data.customerIntent}`,
     });
 
-    await saveOutbound('follow_up');
+    await emailAgent.deliver({
+      to: lead.contact_email!,
+      subject: analysis.data.replySubject,
+      body: analysis.data.replyBody,
+      dealId,
+      recipientName: lead.contact_name,
+      emailType: 'follow_up',
+    });
 
     AuditLog.log('sales', 'deal_closed_lost', 'deal', dealId, {
       round: roundNumber,
@@ -361,7 +352,7 @@ export class WorkflowEngine {
   private async completeWorkflow(dealId: string, leadId: string, deal: any) {
     console.log('\n📍 Running Legal → Accounting → Invoice pipeline');
 
-    const { legalAgent, accountingAgent, emailService } = await this.createAgents();
+    const { legalAgent, accountingAgent, emailAgent } = await this.createAgents();
 
     const salesData = {
       productName: deal.product_name,
@@ -395,7 +386,7 @@ export class WorkflowEngine {
 
       await TaskQueue.startProcessing(task.id!);
       try {
-        await emailService.sendEmail(
+        await emailAgent.sendEmail(
           taskData.parsedInput.leadId,
           taskData.parsedInput.emailType || 'invoice',
           {

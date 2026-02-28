@@ -1,6 +1,6 @@
 import { DealDB, LeadDB } from '../database/db';
 import { CompanyProfileDB } from '../database/db';
-import { EmailService } from '../agents/email-service';
+import { EmailAgent } from '../agents/email-agent';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -9,11 +9,11 @@ function daysSince(isoDate: string): number {
   return ms / (1000 * 60 * 60 * 24);
 }
 
-async function getEmailService(): Promise<EmailService> {
+async function getEmailAgent(): Promise<EmailAgent> {
   const profile = await CompanyProfileDB.get();
-  if (!profile) return new EmailService(null);
+  if (!profile) return new EmailAgent(null);
   const agentContexts = JSON.parse(profile.agent_context_json || '{}');
-  return new EmailService({
+  return new EmailAgent({
     id: 'main',
     name: profile.name,
     website: profile.website,
@@ -49,7 +49,7 @@ export async function pollStaleLeads(): Promise<void> {
     if (stale.length === 0) return;
     console.log(`\n📬 Stale leads: ${stale.length} deal(s) need follow-up`);
 
-    const emailService = await getEmailService();
+    const emailAgent = await getEmailAgent();
 
     for (const deal of stale) {
       try {
@@ -60,7 +60,7 @@ export async function pollStaleLeads(): Promise<void> {
         }
 
         const followUpCount = deal.follow_up_count ?? 0;
-        await emailService.sendEmail(deal.lead_id, 'follow_up', {
+        await emailAgent.sendEmail(deal.lead_id, 'follow_up', {
           dealId: deal.id,
           salesResult: {
             productName: deal.product_name,
@@ -172,11 +172,11 @@ export async function pollSatisfactionEmails(): Promise<void> {
     if (toNotify.length === 0) return;
     console.log(`\n😊 Satisfaction emails: ${toNotify.length} deal(s) ready`);
 
-    const emailService = await getEmailService();
+    const emailAgent = await getEmailAgent();
 
     for (const deal of toNotify) {
       try {
-        await emailService.sendEmail(deal.lead_id, 'satisfaction', {
+        await emailAgent.sendEmail(deal.lead_id, 'satisfaction', {
           dealId: deal.id,
           salesResult: { productName: deal.product_name },
         });
