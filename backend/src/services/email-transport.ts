@@ -31,6 +31,7 @@ export async function sendRealEmail(params: {
   body: string;
   inReplyTo?: string;
   references?: string;
+  attachments?: Array<{ filename: string; content: Buffer }>;
 }): Promise<{ sent: boolean; messageId?: string; error?: string }> {
   const fromUser = process.env.GMAIL_USER;
 
@@ -49,6 +50,10 @@ export async function sendRealEmail(params: {
       text: params.body,
       html: formatEmailHTML(params.subject, params.body),
       replyTo: fromUser,
+      attachments: params.attachments?.map(a => ({
+        filename: a.filename,
+        content: a.content,
+      })),
     };
 
     // Thread replies together

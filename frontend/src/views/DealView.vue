@@ -2,7 +2,18 @@
   <div v-if="deal">
     <div class="flex items-center justify-between mb-8">
       <h1 class="text-3xl font-bold text-gray-900">Deal #{{ deal.id }}</h1>
-      <router-link to="/dashboard" class="text-gray-500 hover:text-gray-700">Back to Dashboard</router-link>
+      <div class="flex items-center space-x-3">
+        <button
+          v-if="deal.subtotal > 0"
+          @click="downloadPDF"
+          :disabled="downloadingPDF"
+          class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center space-x-2 text-sm font-medium"
+        >
+          <span v-if="downloadingPDF">Generating...</span>
+          <span v-else>Download Offer PDF</span>
+        </button>
+        <router-link to="/dashboard" class="text-gray-500 hover:text-gray-700">Back to Dashboard</router-link>
+      </div>
     </div>
 
     <!-- Deal Summary -->
@@ -113,9 +124,32 @@ import { dealsApi } from '../api/client'
 
 const route = useRoute()
 const deal = ref<any>(null)
+const downloadingPDF = ref(false)
 
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat('el-GR', { style: 'currency', currency: 'EUR' }).format(amount || 0)
+}
+
+async function downloadPDF() {
+  if (!deal.value?.id) return
+  downloadingPDF.value = true
+  try {
+    const response = await dealsApi.downloadPDF(deal.value.id)
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+    const link = document.createElement('a')
+    link.href = url
+    const refId = deal.value.id.slice(0, 8).toUpperCase()
+    link.download = `Prosfora-${refId}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  } catch (err) {
+    console.error('PDF download failed:', err)
+    alert('Failed to generate PDF. Please try again.')
+  } finally {
+    downloadingPDF.value = false
+  }
 }
 
 onMounted(async () => {

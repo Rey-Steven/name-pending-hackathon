@@ -37,6 +37,7 @@ interface DirectDeliveryParams {
   references?: string;
   invoiceId?: string;
   taskId?: string;
+  attachments?: Array<{ filename: string; content: Buffer }>;
 }
 
 // ─── Unified Email Agent ───
@@ -320,6 +321,7 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
       body: params.body,
       inReplyTo: params.inReplyTo,
       references: params.references,
+      attachments: params.attachments,
     });
 
     await EmailDB.create({

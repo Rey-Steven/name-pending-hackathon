@@ -80,15 +80,17 @@ Set "qualification" to "close" — we always contact this lead. Use BANT to info
     // Always force qualification to close — BANT is informational only
     result.data.qualification = 'close';
 
+    // Pricing deferred — set to 0 until customer expresses interest and we understand their needs.
+    // Actual pricing is calculated when the customer replies and triggers wants_offer/counter/new_offer.
     const dealId = await DealDB.create({
       lead_id: leadId,
-      deal_value: result.data.subtotal,
+      deal_value: 0,
       product_name: result.data.productName,
-      quantity: result.data.quantity,
-      subtotal: result.data.subtotal,
-      fpa_rate: result.data.fpaRate,
-      fpa_amount: result.data.fpaAmount,
-      total_amount: result.data.totalAmount,
+      quantity: 0,
+      subtotal: 0,
+      fpa_rate: 0.24,
+      fpa_amount: 0,
+      total_amount: 0,
       qualification_result: JSON.stringify({
         budget: result.data.budget,
         authority: result.data.authority,

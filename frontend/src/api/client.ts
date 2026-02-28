@@ -21,6 +21,7 @@ export const leadsApi = {
 export const dealsApi = {
   getAll: () => api.get('/deals'),
   getById: (id: string) => api.get(`/deals/${id}`),
+  downloadPDF: (id: string) => api.get(`/deals/${id}/pdf`, { responseType: 'blob' }),
 }
 
 export const tasksApi = {
