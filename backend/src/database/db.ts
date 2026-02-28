@@ -5,13 +5,24 @@ const fdb = () => getFirestore();
 
 // ─── Helpers ──────────────────────────────────────────────────
 
+// Soft-deleted docs (deleted_at is a non-null string) are treated as non-existent.
 function docToObj<T>(doc: admin.firestore.DocumentSnapshot): T | undefined {
   if (!doc.exists) return undefined;
-  return { id: doc.id, ...doc.data() } as T;
+  const data = doc.data()!;
+  if (data.deleted_at) return undefined;
+  return { id: doc.id, ...data } as T;
 }
 
 function snapToDocs<T>(snap: admin.firestore.QuerySnapshot): T[] {
-  return snap.docs.map(d => ({ id: d.id, ...d.data() })) as T[];
+  return snap.docs
+    .filter(d => !d.data().deleted_at)
+    .map(d => ({ id: d.id, ...d.data() })) as T[];
+}
+
+async function softDeleteDoc(collection: string, id: string): Promise<void> {
+  await fdb().collection(collection).doc(id).update({
+    deleted_at: new Date().toISOString(),
+  });
 }
 
 // ─── Interfaces ───────────────────────────────────────────────
@@ -31,6 +42,7 @@ export interface Lead {
   status?: string;
   created_at?: string;
   updated_at?: string;
+  deleted_at?: string | null;
 }
 
 export interface Deal {
@@ -51,6 +63,7 @@ export interface Deal {
   status?: string;
   created_at?: string;
   updated_at?: string;
+  deleted_at?: string | null;
 }
 
 export interface Task {
@@ -70,6 +83,7 @@ export interface Task {
   created_at?: string;
   started_at?: string;
   completed_at?: string;
+  deleted_at?: string | null;
 }
 
 export interface Invoice {
@@ -93,6 +107,7 @@ export interface Invoice {
   status?: string;
   created_at?: string;
   updated_at?: string;
+  deleted_at?: string | null;
 }
 
 export interface Email {
@@ -112,6 +127,7 @@ export interface Email {
   error_message?: string;
   created_at?: string;
   sent_at?: string;
+  deleted_at?: string | null;
 }
 
 export interface LegalValidation {
@@ -128,6 +144,7 @@ export interface LegalValidation {
   approval_notes?: string;
   reviewed_at?: string;
   created_at?: string;
+  deleted_at?: string | null;
 }
 
 export interface CompanyProfile {
@@ -145,7 +162,7 @@ export interface CompanyProfile {
   raw_scraped_data?: string;
   agent_context_json: string; // JSON string
   setup_complete?: boolean;
-  kad_codes?: string;       // JSON: [{ code: "6201", description: "..." }]
+  kad_codes?: string;        // JSON: [{ code: "6201", description: "..." }]
   help_center_json?: string; // JSON: { intro: string, faqs: [{question, answer}] }
   created_at?: string;
   updated_at?: string;
@@ -170,6 +187,7 @@ export const LeadDB = {
       status: lead.status || 'new',
       created_at: now,
       updated_at: now,
+      deleted_at: null,
     });
     return ref.id;
   },
@@ -186,6 +204,8 @@ export const LeadDB = {
       updated_at: new Date().toISOString(),
     });
   },
+
+  delete: async (id: string): Promise<void> => softDeleteDoc('leads', id),
 
   all: async (): Promise<Lead[]> => {
     const snap = await fdb().collection('leads').orderBy('created_at', 'desc').get();
@@ -213,6 +233,7 @@ export const DealDB = {
       status: deal.status || 'pending',
       created_at: now,
       updated_at: now,
+      deleted_at: null,
     });
     return ref.id;
   },
@@ -229,6 +250,8 @@ export const DealDB = {
       updated_at: new Date().toISOString(),
     });
   },
+
+  delete: async (id: string): Promise<void> => softDeleteDoc('deals', id),
 
   all: async (): Promise<Deal[]> => {
     const snap = await fdb().collection('deals').orderBy('created_at', 'desc').get();
@@ -264,6 +287,7 @@ export const TaskDB = {
       created_at: now,
       started_at: null,
       completed_at: null,
+      deleted_at: null,
     });
     return ref.id;
   },
@@ -293,6 +317,8 @@ export const TaskDB = {
     if (data.status === 'completed') data.completed_at = new Date().toISOString();
     await fdb().collection('tasks').doc(id).update(data);
   },
+
+  delete: async (id: string): Promise<void> => softDeleteDoc('tasks', id),
 
   all: async (): Promise<Task[]> => {
     const snap = await fdb().collection('tasks').orderBy('created_at', 'desc').get();
@@ -331,6 +357,7 @@ export const InvoiceDB = {
       status: invoice.status || 'draft',
       created_at: now,
       updated_at: now,
+      deleted_at: null,
     });
     return ref.id;
   },
@@ -351,6 +378,8 @@ export const InvoiceDB = {
     const snap = await fdb().collection('invoices').orderBy('created_at', 'desc').get();
     return snapToDocs<Invoice>(snap);
   },
+
+  delete: async (id: string): Promise<void> => softDeleteDoc('invoices', id),
 
   getNextInvoiceNumber: async (): Promise<string> => {
     const year = new Date().getFullYear();
@@ -386,6 +415,7 @@ export const EmailDB = {
       error_message: email.error_message || null,
       created_at: now,
       sent_at: email.status === 'sent' ? now : null,
+      deleted_at: null,
     });
     return ref.id;
   },
@@ -402,6 +432,8 @@ export const EmailDB = {
     return docToObj<Email>(doc);
   },
 
+  delete: async (id: string): Promise<void> => softDeleteDoc('emails', id),
+
   all: async (): Promise<Email[]> => {
     const snap = await fdb().collection('emails').orderBy('created_at', 'desc').get();
     return snapToDocs<Email>(snap);
@@ -410,18 +442,20 @@ export const EmailDB = {
   // Used by email-transport.ts to match inbox replies to our sent emails
   findSent: async (): Promise<Array<{ id: string; deal_id: string | null; recipient_email: string; subject: string }>> => {
     const snap = await fdb().collection('emails').where('status', '==', 'sent').get();
-    return snap.docs.map(d => ({
-      id: d.id,
-      deal_id: (d.data().deal_id as string | null) || null,
-      recipient_email: d.data().recipient_email as string,
-      subject: d.data().subject as string,
-    }));
+    return snap.docs
+      .filter(d => !d.data().deleted_at)
+      .map(d => ({
+        id: d.id,
+        deal_id: (d.data().deal_id as string | null) || null,
+        recipient_email: d.data().recipient_email as string,
+        subject: d.data().subject as string,
+      }));
   },
 
   findSentByDeal: async (dealId: string): Promise<Array<{ id: string; recipient_email: string; subject: string; created_at: string }>> => {
     const snap = await fdb().collection('emails').where('deal_id', '==', dealId).get();
     const docs = snap.docs
-      .filter(d => d.data().status === 'sent')
+      .filter(d => !d.data().deleted_at && d.data().status === 'sent')
       .map(d => ({
         id: d.id,
         recipient_email: d.data().recipient_email as string,
@@ -445,7 +479,9 @@ export const EmailDB = {
       .limit(1)
       .get();
     if (snap.empty) return undefined;
-    return { id: snap.docs[0].id, ...snap.docs[0].data() } as Email;
+    const doc = snap.docs[0];
+    if (doc.data().deleted_at) return undefined;
+    return { id: doc.id, ...doc.data() } as Email;
   },
 };
 
@@ -467,6 +503,7 @@ export const LegalValidationDB = {
       approval_notes: validation.approval_notes || null,
       reviewed_at: null,
       created_at: now,
+      deleted_at: null,
     });
     return ref.id;
   },
@@ -486,6 +523,8 @@ export const LegalValidationDB = {
     }
     await fdb().collection('legal_validations').doc(id).update(data);
   },
+
+  delete: async (id: string): Promise<void> => softDeleteDoc('legal_validations', id),
 };
 
 // ─── Audit Log ────────────────────────────────────────────────
