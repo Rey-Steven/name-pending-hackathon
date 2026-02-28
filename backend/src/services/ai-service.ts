@@ -37,6 +37,9 @@ export async function callAI(
   const textBlock = response.content.find(b => b.type === 'text');
   const content = textBlock ? textBlock.text : '';
 
+  if (response.stop_reason === 'max_tokens') {
+    console.warn(`  ⚠️  Response hit max_tokens limit (${maxTokens}) — output may be truncated!`);
+  }
   console.log(`  ✅ Response received (${response.usage.input_tokens} in / ${response.usage.output_tokens} out)`);
 
   return {

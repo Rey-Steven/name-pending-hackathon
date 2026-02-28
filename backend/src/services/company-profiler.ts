@@ -119,7 +119,7 @@ export async function profileCompany(input: ProfilerInput): Promise<CompanyProfi
   const userPrompt = `Analyze the following company information and generate a comprehensive profile with tailored AI agent contexts:\n\n${sources.join('\n')}`;
 
   console.log(`  🔍 Profiling company: ${input.companyName}...`);
-  const response = await callAI(SYSTEM_PROMPT, userPrompt, 'sonnet', 4096);
+  const response = await callAI(SYSTEM_PROMPT, userPrompt, 'sonnet', 8192);
   const result = parseJSONResponse<CompanyProfileResult>(response.content);
 
   console.log(`  ✅ Company profile generated: ${result.industry} / ${result.business_model}`);
