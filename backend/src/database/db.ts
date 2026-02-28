@@ -629,6 +629,14 @@ export const MarketResearchDB = {
     return docs[0];
   },
 
+  hasRunning: async (companyId: string): Promise<boolean> => {
+    const snap = await fdb().collection('market_research')
+      .where('company_id', '==', companyId)
+      .where('status', '==', 'running')
+      .get();
+    return !snap.empty;
+  },
+
   all: async (companyId: string): Promise<MarketResearch[]> => {
     const snap = await fdb().collection('market_research')
       .where('company_id', '==', companyId)

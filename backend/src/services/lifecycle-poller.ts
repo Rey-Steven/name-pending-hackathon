@@ -257,6 +257,13 @@ export async function pollMarketResearch(): Promise<void> {
     const companyId = await CompanyProfileDB.getActiveId();
     if (!companyId) return;
 
+    // Skip if research is already running
+    const running = await MarketResearchDB.hasRunning(companyId);
+    if (running) {
+      console.log('  ⏭️  Market research already running, skipping');
+      return;
+    }
+
     // Check if research already ran today
     const latest = await MarketResearchDB.getLatest(companyId);
     if (latest && latest.created_at) {

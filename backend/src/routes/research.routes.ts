@@ -69,6 +69,12 @@ router.post('/trigger', async (_req: Request, res: Response) => {
     const profile = await CompanyProfileDB.get();
     if (!profile) return res.status(400).json({ error: 'No company profile configured' });
 
+    const companyId = await CompanyProfileDB.getActiveId();
+    if (companyId) {
+      const running = await MarketResearchDB.hasRunning(companyId);
+      if (running) return res.status(409).json({ error: 'Research is already running' });
+    }
+
     const agent = new MarketingAgent(buildProfileContext(profile));
     const researchId = await agent.runMarketResearch('manual');
     res.json({ success: true, researchId });
