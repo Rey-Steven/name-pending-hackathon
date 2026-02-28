@@ -25,6 +25,10 @@ Email types:
 - "follow_up": Follow-up message
 
 IMPORTANT: The recipientEmail MUST be the exact email from the RECIPIENT section below. Do not make up emails.
+Keep response concise to avoid truncation:
+- reasoning: max 3 short bullet-style items
+- subject: max 120 characters
+- body: max 220 words
 
 ALWAYS respond with valid JSON in this exact format:
 {

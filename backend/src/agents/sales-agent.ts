@@ -44,6 +44,9 @@ Important qualification rules:
 - Never set qualification = "reject" solely because of email domain quality (free/personal domain, gmail, or test-looking inbox).
 - Approved test emails must be treated as valid for demo/testing and should not reduce qualification.
 - Reject only for clear business disqualification (no fit, no need, no budget, or explicit refusal). If uncertain, prefer "nurture".
+- For leadScore A/B with clear industry fit and decision-maker contact, default to qualification = "close" even if budget/timeline are not explicitly confirmed.
+- Missing website, missing timeline, or unverified budget are NOT sufficient reasons for "nurture" when the lead otherwise matches ICP.
+- In those cases, create a reasonable initial offer and use proposalSummary to request a discovery call for final scope/timeline confirmation.
 
 ALWAYS respond with valid JSON in this exact format:
 {
@@ -94,6 +97,15 @@ Evaluate BANT criteria, decide to close/nurture/reject, and calculate pricing if
 
     // Execute AI analysis
     const result = await this.execute<SalesResult>({ lead, marketingResult }, { leadId });
+    const hasStrongFitSignals =
+      result.data.qualification === 'nurture' &&
+      ['A', 'B'].includes(marketingResult?.leadScore || '') &&
+      Boolean(lead.contact_email);
+
+    if (hasStrongFitSignals) {
+      result.data.qualification = 'close';
+      result.decision = `Close - auto-upgraded from nurture for strong A/B fit lead to continue proposal workflow. Original AI decision: ${result.decision}`;
+    }
 
     if (result.data.qualification === 'close') {
       // Create deal with 'proposal_sent' status — NOT 'legal_review'

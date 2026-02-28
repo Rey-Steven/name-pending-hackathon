@@ -98,6 +98,12 @@ export class WorkflowEngine {
       console.log('\n📍 PHASE 1c: Email Agent - Sending Proposal');
 
       const emailTasks = TaskQueue.getPending('email');
+      if (emailTasks.length === 0) {
+        throw new Error(`No pending email task found for deal #${dealId}`);
+      }
+
+      let sentCount = 0;
+      let failedCount = 0;
       for (const task of emailTasks) {
         const taskData = TaskQueue.getTaskWithData(task.id!);
         if (!taskData) continue;
@@ -113,13 +119,34 @@ export class WorkflowEngine {
             }
           );
           TaskQueue.complete(task.id!, { processed: true });
+          sentCount += 1;
         } catch (error: any) {
           console.error(`  ❌ Email task ${task.id} failed:`, error.message);
           TaskQueue.fail(task.id!, error.message);
+          failedCount += 1;
         }
       }
 
       const duration = Date.now() - startTime;
+      if (sentCount === 0) {
+        const failureMessage = `Proposal email failed for Deal #${dealId} (${failedCount} failed task${failedCount === 1 ? '' : 's'})`;
+        console.error(`\n❌ ${failureMessage}`);
+        AuditLog.log('workflow', 'proposal_failed', 'deal', dealId, { leadId, dealId, duration, failedCount });
+        broadcastEvent({
+          type: 'workflow_completed',
+          agent: 'email',
+          leadId,
+          dealId,
+          message: failureMessage,
+          timestamp: new Date().toISOString(),
+        });
+        return {
+          status: 'proposal_failed',
+          dealId,
+          duration,
+          message: failureMessage,
+        };
+      }
 
       console.log('\n' + '═'.repeat(60));
       console.log(`  📧 PROPOSAL SENT - Awaiting customer reply`);
