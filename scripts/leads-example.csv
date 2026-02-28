@@ -1,0 +1,9 @@
+companyName,contactName,contactEmail,contactPhone,productInterest,companyWebsite
+Acme Corp,John Doe,john@acme.com,+30 210 1234567,Enterprise Plan,https://acme.com
+Beta Technologies,Maria Papadopoulou,maria@beta.gr,+30 211 9876543,Standard Plan,https://beta.gr
+Gamma Solutions SA,Nikos Alexiou,nikos@gamma.gr,,Premium Support,https://gamma.gr
+Delta Imports Ltd,Sofia Georgiou,sofia@delta.com,+30 694 5551234,Basic Plan,
+Epsilon Exports,Kostas Nikolaou,kostas@epsilon.gr,+30 697 7778888,Enterprise Plan,https://epsilon.gr
+Zeta Consulting,Anna Dimitriou,anna@zeta.gr,,Standard Plan,https://zeta.gr
+Eta Manufacturing,Yannis Stavros,yannis@eta.gr,+30 210 3334444,Custom Integration,https://eta.gr
+Theta Logistics,Christina Makris,christina@theta.com,+30 693 1112222,Enterprise Plan,https://theta.com
