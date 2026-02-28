@@ -8,13 +8,15 @@ const router = Router();
 const sseClients: Set<Response> = new Set();
 
 // GET /api/dashboard/stats - Dashboard statistics
-router.get('/stats', (_req: Request, res: Response) => {
+router.get('/stats', async (_req: Request, res: Response) => {
   try {
-    const leads = LeadDB.all();
-    const deals = DealDB.all();
-    const tasks = TaskDB.all();
-    const invoices = InvoiceDB.all();
-    const emails = EmailDB.all();
+    const [leads, deals, tasks, invoices, emails] = await Promise.all([
+      LeadDB.all(),
+      DealDB.all(),
+      TaskDB.all(),
+      InvoiceDB.all(),
+      EmailDB.all(),
+    ]);
 
     res.json({
       leads: {
@@ -51,9 +53,9 @@ router.get('/stats', (_req: Request, res: Response) => {
 });
 
 // GET /api/dashboard/audit - Recent audit log
-router.get('/audit', (_req: Request, res: Response) => {
+router.get('/audit', async (_req: Request, res: Response) => {
   try {
-    const logs = AuditLog.getRecent(100);
+    const logs = await AuditLog.getRecent(100);
     res.json(logs);
   } catch (error: any) {
     res.status(500).json({ error: error.message });

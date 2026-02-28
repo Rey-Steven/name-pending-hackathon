@@ -1,52 +1,41 @@
-import Database from 'better-sqlite3';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as admin from 'firebase-admin';
+import { getFirestore } from './firebase';
 
-const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, '../../database.sqlite');
+const fdb = () => getFirestore();
 
-// Initialize database connection
-export const db = new Database(DB_PATH);
+// ─── Helpers ──────────────────────────────────────────────────
 
-// Enable foreign keys
-db.pragma('foreign_keys = ON');
-
-// Initialize database schema
-export function initializeDatabase() {
-  const schemaPath = path.join(__dirname, 'schema.sql');
-  const schema = fs.readFileSync(schemaPath, 'utf-8');
-
-  // Split by semicolon and execute each statement
-  const statements = schema
-    .split(';')
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
-
-  for (const statement of statements) {
-    db.exec(statement + ';');
-  }
-
-  console.log('✅ Database initialized successfully');
+function docToObj<T>(doc: admin.firestore.DocumentSnapshot): T | undefined {
+  if (!doc.exists) return undefined;
+  return { id: doc.id, ...doc.data() } as T;
 }
 
-// Helper functions for common operations
+function snapToDocs<T>(snap: admin.firestore.QuerySnapshot): T[] {
+  return snap.docs.map(d => ({ id: d.id, ...d.data() })) as T[];
+}
+
+// ─── Interfaces ───────────────────────────────────────────────
 
 export interface Lead {
-  id?: number;
+  id?: string;
   company_name: string;
   contact_name: string;
   contact_email?: string;
   contact_phone?: string;
+  product_interest?: string;
   company_website?: string;
   industry?: string;
   company_size?: string;
   annual_revenue?: string;
   lead_score?: 'A' | 'B' | 'C';
   status?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Deal {
-  id?: number;
-  lead_id: number;
+  id?: string;
+  lead_id: string;
   deal_value: number;
   product_name: string;
   quantity?: number;
@@ -58,12 +47,14 @@ export interface Deal {
   sales_notes?: string;
   negotiation_round?: number;
   status?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Task {
-  id?: number;
-  deal_id?: number;
-  lead_id?: number;
+  id?: string;
+  deal_id?: string;
+  lead_id?: string;
   source_agent: 'marketing' | 'sales' | 'legal' | 'accounting' | 'email';
   target_agent: 'marketing' | 'sales' | 'legal' | 'accounting' | 'email';
   task_type: string;
@@ -74,11 +65,14 @@ export interface Task {
   error_message?: string;
   status?: 'pending' | 'processing' | 'completed' | 'failed';
   priority?: number;
+  created_at?: string;
+  started_at?: string;
+  completed_at?: string;
 }
 
 export interface Invoice {
-  id?: number;
-  deal_id: number;
+  id?: string;
+  deal_id: string;
   invoice_number: string;
   invoice_date?: string;
   due_date?: string;
@@ -87,7 +81,7 @@ export interface Invoice {
   customer_doy?: string;
   customer_address?: string;
   customer_email?: string;
-  line_items: string; // JSON
+  line_items: string; // JSON string
   subtotal: number;
   fpa_rate?: number;
   fpa_amount: number;
@@ -95,13 +89,15 @@ export interface Invoice {
   payment_terms?: string;
   payment_status?: string;
   status?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Email {
-  id?: number;
-  task_id?: number;
-  deal_id?: number;
-  invoice_id?: number;
+  id?: string;
+  task_id?: string;
+  deal_id?: string;
+  invoice_id?: string;
   recipient_email: string;
   recipient_name: string;
   subject: string;
@@ -109,379 +105,28 @@ export interface Email {
   email_type?: 'proposal' | 'invoice' | 'confirmation' | 'follow_up';
   status?: 'pending' | 'sent' | 'failed';
   error_message?: string;
+  created_at?: string;
+  sent_at?: string;
 }
 
 export interface LegalValidation {
-  id?: number;
-  deal_id: number;
+  id?: string;
+  deal_id: string;
   afm_valid?: boolean;
   afm_number?: string;
   company_registry_valid?: boolean;
   gdpr_compliant?: boolean;
   contract_terms_valid?: boolean;
   risk_level?: 'low' | 'medium' | 'high';
-  risk_flags?: string; // JSON
+  risk_flags?: string; // JSON string
   approval_status?: 'pending' | 'approved' | 'rejected' | 'review_required';
   approval_notes?: string;
+  reviewed_at?: string;
+  created_at?: string;
 }
 
-// Lead operations
-export const LeadDB = {
-  create: (lead: Lead) => {
-    const stmt = db.prepare(`
-      INSERT INTO leads (company_name, contact_name, contact_email, contact_phone,
-                         company_website, industry, company_size,
-                         annual_revenue, lead_score, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const result = stmt.run(
-      lead.company_name,
-      lead.contact_name,
-      lead.contact_email || null,
-      lead.contact_phone || null,
-      lead.company_website || null,
-      lead.industry || null,
-      lead.company_size || null,
-      lead.annual_revenue || null,
-      lead.lead_score || null,
-      lead.status || 'new'
-    );
-    return result.lastInsertRowid as number;
-  },
-
-  findById: (id: number): Lead | undefined => {
-    const stmt = db.prepare('SELECT * FROM leads WHERE id = ?');
-    return stmt.get(id) as Lead | undefined;
-  },
-
-  update: (id: number, updates: Partial<Lead>) => {
-    const fields = Object.keys(updates)
-      .filter(k => k !== 'id')
-      .map(k => `${k} = ?`);
-    const values = Object.keys(updates)
-      .filter(k => k !== 'id')
-      .map(k => (updates as any)[k]);
-
-    const stmt = db.prepare(`
-      UPDATE leads
-      SET ${fields.join(', ')}, updated_at = datetime('now')
-      WHERE id = ?
-    `);
-    stmt.run(...values, id);
-  },
-
-  all: (): Lead[] => {
-    const stmt = db.prepare('SELECT * FROM leads ORDER BY created_at DESC');
-    return stmt.all() as Lead[];
-  }
-};
-
-// Deal operations
-export const DealDB = {
-  create: (deal: Deal) => {
-    const stmt = db.prepare(`
-      INSERT INTO deals (lead_id, deal_value, product_name, quantity, subtotal,
-                        fpa_rate, fpa_amount, total_amount, qualification_result,
-                        sales_notes, negotiation_round, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const result = stmt.run(
-      deal.lead_id,
-      deal.deal_value,
-      deal.product_name,
-      deal.quantity || 1,
-      deal.subtotal,
-      deal.fpa_rate || 0.24,
-      deal.fpa_amount,
-      deal.total_amount,
-      deal.qualification_result || null,
-      deal.sales_notes || null,
-      deal.negotiation_round || 0,
-      deal.status || 'pending'
-    );
-    return result.lastInsertRowid as number;
-  },
-
-  findById: (id: number): Deal | undefined => {
-    const stmt = db.prepare('SELECT * FROM deals WHERE id = ?');
-    return stmt.get(id) as Deal | undefined;
-  },
-
-  update: (id: number, updates: Partial<Deal>) => {
-    const fields = Object.keys(updates)
-      .filter(k => k !== 'id')
-      .map(k => `${k} = ?`);
-    const values = Object.keys(updates)
-      .filter(k => k !== 'id')
-      .map(k => (updates as any)[k]);
-
-    const stmt = db.prepare(`
-      UPDATE deals
-      SET ${fields.join(', ')}, updated_at = datetime('now')
-      WHERE id = ?
-    `);
-    stmt.run(...values, id);
-  },
-
-  all: (): Deal[] => {
-    const stmt = db.prepare('SELECT * FROM deals ORDER BY created_at DESC');
-    return stmt.all() as Deal[];
-  }
-};
-
-// Task operations
-export const TaskDB = {
-  create: (task: Task) => {
-    const stmt = db.prepare(`
-      INSERT INTO tasks (deal_id, lead_id, source_agent, target_agent, task_type,
-                        title, description, input_data, status, priority)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const result = stmt.run(
-      task.deal_id || null,
-      task.lead_id || null,
-      task.source_agent,
-      task.target_agent,
-      task.task_type,
-      task.title,
-      task.description || null,
-      task.input_data || null,
-      task.status || 'pending',
-      task.priority || 0
-    );
-    return result.lastInsertRowid as number;
-  },
-
-  findById: (id: number): Task | undefined => {
-    const stmt = db.prepare('SELECT * FROM tasks WHERE id = ?');
-    return stmt.get(id) as Task | undefined;
-  },
-
-  findPending: (targetAgent: string): Task[] => {
-    const stmt = db.prepare(`
-      SELECT * FROM tasks
-      WHERE target_agent = ? AND status = 'pending'
-      ORDER BY priority DESC, created_at ASC
-    `);
-    return stmt.all(targetAgent) as Task[];
-  },
-
-  update: (id: number, updates: Partial<Task>) => {
-    const fields = Object.keys(updates)
-      .filter(k => k !== 'id')
-      .map(k => `${k} = ?`);
-    const values = Object.keys(updates)
-      .filter(k => k !== 'id')
-      .map(k => (updates as any)[k]);
-
-    const updateFields = fields.join(', ');
-    const setCompleted = updates.status === 'completed' ? ', completed_at = datetime(\'now\')' : '';
-    const setStarted = updates.status === 'processing' ? ', started_at = datetime(\'now\')' : '';
-
-    const stmt = db.prepare(`
-      UPDATE tasks
-      SET ${updateFields}${setCompleted}${setStarted}
-      WHERE id = ?
-    `);
-    stmt.run(...values, id);
-  },
-
-  all: (): Task[] => {
-    const stmt = db.prepare('SELECT * FROM tasks ORDER BY created_at DESC');
-    return stmt.all() as Task[];
-  },
-
-  findByDeal: (dealId: number): Task[] => {
-    const stmt = db.prepare('SELECT * FROM tasks WHERE deal_id = ? ORDER BY created_at DESC');
-    return stmt.all(dealId) as Task[];
-  }
-};
-
-// Invoice operations
-export const InvoiceDB = {
-  create: (invoice: Invoice) => {
-    const stmt = db.prepare(`
-      INSERT INTO invoices (deal_id, invoice_number, invoice_date, due_date,
-                          customer_name, customer_afm, customer_doy, customer_address,
-                          customer_email, line_items, subtotal, fpa_rate, fpa_amount,
-                          total_amount, payment_terms, payment_status, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const result = stmt.run(
-      invoice.deal_id,
-      invoice.invoice_number,
-      invoice.invoice_date || null,
-      invoice.due_date || null,
-      invoice.customer_name,
-      invoice.customer_afm,
-      invoice.customer_doy || null,
-      invoice.customer_address || null,
-      invoice.customer_email || null,
-      invoice.line_items,
-      invoice.subtotal,
-      invoice.fpa_rate || 0.24,
-      invoice.fpa_amount,
-      invoice.total_amount,
-      invoice.payment_terms || 'Net 30',
-      invoice.payment_status || 'unpaid',
-      invoice.status || 'draft'
-    );
-    return result.lastInsertRowid as number;
-  },
-
-  findById: (id: number): Invoice | undefined => {
-    const stmt = db.prepare('SELECT * FROM invoices WHERE id = ?');
-    return stmt.get(id) as Invoice | undefined;
-  },
-
-  findByDeal: (dealId: number): Invoice | undefined => {
-    const stmt = db.prepare('SELECT * FROM invoices WHERE deal_id = ? ORDER BY created_at DESC LIMIT 1');
-    return stmt.get(dealId) as Invoice | undefined;
-  },
-
-  all: (): Invoice[] => {
-    const stmt = db.prepare('SELECT * FROM invoices ORDER BY created_at DESC');
-    return stmt.all() as Invoice[];
-  },
-
-  getNextInvoiceNumber: (): string => {
-    const year = new Date().getFullYear();
-    const stmt = db.prepare(`
-      SELECT invoice_number FROM invoices
-      WHERE invoice_number LIKE ?
-      ORDER BY invoice_number DESC
-      LIMIT 1
-    `);
-    const lastInvoice = stmt.get(`${year}/%`) as { invoice_number: string } | undefined;
-
-    if (!lastInvoice) {
-      return `${year}/001`;
-    }
-
-    const lastNumber = parseInt(lastInvoice.invoice_number.split('/')[1]);
-    const nextNumber = (lastNumber + 1).toString().padStart(3, '0');
-    return `${year}/${nextNumber}`;
-  }
-};
-
-// Email operations
-export const EmailDB = {
-  create: (email: Email) => {
-    const stmt = db.prepare(`
-      INSERT INTO emails (task_id, deal_id, invoice_id, recipient_email, recipient_name,
-                         subject, body, email_type, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const result = stmt.run(
-      email.task_id || null,
-      email.deal_id || null,
-      email.invoice_id || null,
-      email.recipient_email,
-      email.recipient_name,
-      email.subject,
-      email.body,
-      email.email_type || null,
-      email.status || 'pending'
-    );
-    return result.lastInsertRowid as number;
-  },
-
-  update: (id: number, updates: Partial<Email>) => {
-    const fields = Object.keys(updates)
-      .filter(k => k !== 'id')
-      .map(k => `${k} = ?`);
-    const values = Object.keys(updates)
-      .filter(k => k !== 'id')
-      .map(k => (updates as any)[k]);
-
-    const setSent = updates.status === 'sent' ? ', sent_at = datetime(\'now\')' : '';
-
-    const stmt = db.prepare(`
-      UPDATE emails
-      SET ${fields.join(', ')}${setSent}
-      WHERE id = ?
-    `);
-    stmt.run(...values, id);
-  },
-
-  all: (): Email[] => {
-    const stmt = db.prepare('SELECT * FROM emails ORDER BY created_at DESC');
-    return stmt.all() as Email[];
-  }
-};
-
-// Legal validation operations
-export const LegalValidationDB = {
-  create: (validation: LegalValidation) => {
-    const stmt = db.prepare(`
-      INSERT INTO legal_validations (deal_id, afm_valid, afm_number, company_registry_valid,
-                                     gdpr_compliant, contract_terms_valid, risk_level,
-                                     risk_flags, approval_status, approval_notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const result = stmt.run(
-      validation.deal_id,
-      validation.afm_valid ? 1 : 0,
-      validation.afm_number || null,
-      validation.company_registry_valid ? 1 : 0,
-      validation.gdpr_compliant ? 1 : 0,
-      validation.contract_terms_valid ? 1 : 0,
-      validation.risk_level || null,
-      validation.risk_flags || null,
-      validation.approval_status || 'pending',
-      validation.approval_notes || null
-    );
-    return result.lastInsertRowid as number;
-  },
-
-  findByDeal: (dealId: number): LegalValidation | undefined => {
-    const stmt = db.prepare('SELECT * FROM legal_validations WHERE deal_id = ? ORDER BY created_at DESC LIMIT 1');
-    return stmt.get(dealId) as LegalValidation | undefined;
-  },
-
-  update: (id: number, updates: Partial<LegalValidation>) => {
-    const fields = Object.keys(updates)
-      .filter(k => k !== 'id')
-      .map(k => `${k} = ?`);
-    const values = Object.keys(updates)
-      .filter(k => k !== 'id')
-      .map(k => (updates as any)[k]);
-
-    const setReviewed = updates.approval_status !== 'pending' ? ', reviewed_at = datetime(\'now\')' : '';
-
-    const stmt = db.prepare(`
-      UPDATE legal_validations
-      SET ${fields.join(', ')}${setReviewed}
-      WHERE id = ?
-    `);
-    stmt.run(...values, id);
-  }
-};
-
-// Audit log
-export const AuditLog = {
-  log: (agentType: string, action: string, entityType?: string, entityId?: number, details?: any) => {
-    const stmt = db.prepare(`
-      INSERT INTO audit_log (agent_type, action, entity_type, entity_id, details)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-    stmt.run(
-      agentType,
-      action,
-      entityType || null,
-      entityId || null,
-      details ? JSON.stringify(details) : null
-    );
-  },
-
-  getRecent: (limit: number = 50): any[] => {
-    const stmt = db.prepare('SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT ?');
-    return stmt.all(limit) as any[];
-  }
-};
-
 export interface CompanyProfile {
-  id?: number;
+  id?: string;
   name: string;
   website?: string;
   logo_path?: string;
@@ -493,73 +138,381 @@ export interface CompanyProfile {
   geographic_focus?: string;
   user_provided_text?: string;
   raw_scraped_data?: string;
-  agent_context_json: string; // JSON: { marketing, sales, legal, accounting, email }
-  setup_complete?: number;
+  agent_context_json: string; // JSON string
+  setup_complete?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export const CompanyProfileDB = {
-  get: (): CompanyProfile | undefined => {
-    const stmt = db.prepare('SELECT * FROM company_profiles ORDER BY id DESC LIMIT 1');
-    return stmt.get() as CompanyProfile | undefined;
+// ─── Lead Operations ──────────────────────────────────────────
+
+export const LeadDB = {
+  create: async (lead: Lead): Promise<string> => {
+    const now = new Date().toISOString();
+    const ref = await fdb().collection('leads').add({
+      company_name: lead.company_name,
+      contact_name: lead.contact_name,
+      contact_email: lead.contact_email || null,
+      contact_phone: lead.contact_phone || null,
+      product_interest: lead.product_interest || null,
+      company_website: lead.company_website || null,
+      industry: lead.industry || null,
+      company_size: lead.company_size || null,
+      annual_revenue: lead.annual_revenue || null,
+      lead_score: lead.lead_score || null,
+      status: lead.status || 'new',
+      created_at: now,
+      updated_at: now,
+    });
+    return ref.id;
   },
 
-  create: (profile: CompanyProfile): number => {
-    const stmt = db.prepare(`
-      INSERT INTO company_profiles (name, website, logo_path, industry, description,
-        business_model, target_customers, products_services, geographic_focus,
-        user_provided_text, raw_scraped_data, agent_context_json, setup_complete)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const result = stmt.run(
-      profile.name,
-      profile.website || null,
-      profile.logo_path || null,
-      profile.industry || null,
-      profile.description || null,
-      profile.business_model || null,
-      profile.target_customers || null,
-      profile.products_services || null,
-      profile.geographic_focus || null,
-      profile.user_provided_text || null,
-      profile.raw_scraped_data || null,
-      profile.agent_context_json,
-      profile.setup_complete ?? 1
-    );
-    return result.lastInsertRowid as number;
+  findById: async (id: string): Promise<Lead | undefined> => {
+    const doc = await fdb().collection('leads').doc(id).get();
+    return docToObj<Lead>(doc);
   },
 
-  update: (id: number, updates: Partial<CompanyProfile>) => {
-    const fields = Object.keys(updates)
-      .filter(k => k !== 'id')
-      .map(k => `${k} = ?`);
-    const values = Object.keys(updates)
-      .filter(k => k !== 'id')
-      .map(k => (updates as any)[k]);
-
-    const stmt = db.prepare(`
-      UPDATE company_profiles
-      SET ${fields.join(', ')}, updated_at = datetime('now')
-      WHERE id = ?
-    `);
-    stmt.run(...values, id);
+  update: async (id: string, updates: Partial<Lead>): Promise<void> => {
+    const { id: _id, ...rest } = updates as any;
+    await fdb().collection('leads').doc(id).update({
+      ...rest,
+      updated_at: new Date().toISOString(),
+    });
   },
 
-  isSetupComplete: (): boolean => {
-    const stmt = db.prepare('SELECT setup_complete FROM company_profiles WHERE setup_complete = 1 LIMIT 1');
-    return !!stmt.get();
+  all: async (): Promise<Lead[]> => {
+    const snap = await fdb().collection('leads').orderBy('created_at', 'desc').get();
+    return snapToDocs<Lead>(snap);
   },
 };
 
-// Export database instance and initialization function
-export default {
-  db,
-  initializeDatabase,
-  LeadDB,
-  DealDB,
-  TaskDB,
-  InvoiceDB,
-  EmailDB,
-  LegalValidationDB,
-  AuditLog,
-  CompanyProfileDB,
+// ─── Deal Operations ──────────────────────────────────────────
+
+export const DealDB = {
+  create: async (deal: Deal): Promise<string> => {
+    const now = new Date().toISOString();
+    const ref = await fdb().collection('deals').add({
+      lead_id: deal.lead_id,
+      deal_value: deal.deal_value,
+      product_name: deal.product_name,
+      quantity: deal.quantity || 1,
+      subtotal: deal.subtotal,
+      fpa_rate: deal.fpa_rate || 0.24,
+      fpa_amount: deal.fpa_amount,
+      total_amount: deal.total_amount,
+      qualification_result: deal.qualification_result || null,
+      sales_notes: deal.sales_notes || null,
+      negotiation_round: deal.negotiation_round || 0,
+      status: deal.status || 'pending',
+      created_at: now,
+      updated_at: now,
+    });
+    return ref.id;
+  },
+
+  findById: async (id: string): Promise<Deal | undefined> => {
+    const doc = await fdb().collection('deals').doc(id).get();
+    return docToObj<Deal>(doc);
+  },
+
+  update: async (id: string, updates: Partial<Deal>): Promise<void> => {
+    const { id: _id, ...rest } = updates as any;
+    await fdb().collection('deals').doc(id).update({
+      ...rest,
+      updated_at: new Date().toISOString(),
+    });
+  },
+
+  all: async (): Promise<Deal[]> => {
+    const snap = await fdb().collection('deals').orderBy('created_at', 'desc').get();
+    return snapToDocs<Deal>(snap);
+  },
+};
+
+// ─── Task Operations ──────────────────────────────────────────
+
+export const TaskDB = {
+  create: async (task: Task): Promise<string> => {
+    const now = new Date().toISOString();
+    const ref = await fdb().collection('tasks').add({
+      deal_id: task.deal_id || null,
+      lead_id: task.lead_id || null,
+      source_agent: task.source_agent,
+      target_agent: task.target_agent,
+      task_type: task.task_type,
+      title: task.title,
+      description: task.description || null,
+      input_data: task.input_data || null,
+      output_data: null,
+      error_message: null,
+      status: task.status || 'pending',
+      priority: task.priority || 0,
+      created_at: now,
+      started_at: null,
+      completed_at: null,
+    });
+    return ref.id;
+  },
+
+  findById: async (id: string): Promise<Task | undefined> => {
+    const doc = await fdb().collection('tasks').doc(id).get();
+    return docToObj<Task>(doc);
+  },
+
+  findPending: async (targetAgent: string): Promise<Task[]> => {
+    // Requires composite index: target_agent ASC, status ASC, priority DESC, created_at ASC
+    const snap = await fdb().collection('tasks')
+      .where('target_agent', '==', targetAgent)
+      .where('status', '==', 'pending')
+      .orderBy('priority', 'desc')
+      .orderBy('created_at', 'asc')
+      .get();
+    return snapToDocs<Task>(snap);
+  },
+
+  update: async (id: string, updates: Partial<Task>): Promise<void> => {
+    const { id: _id, ...rest } = updates as any;
+    const data: any = { ...rest };
+    if (data.status === 'processing') data.started_at = new Date().toISOString();
+    if (data.status === 'completed') data.completed_at = new Date().toISOString();
+    await fdb().collection('tasks').doc(id).update(data);
+  },
+
+  all: async (): Promise<Task[]> => {
+    const snap = await fdb().collection('tasks').orderBy('created_at', 'desc').get();
+    return snapToDocs<Task>(snap);
+  },
+
+  findByDeal: async (dealId: string): Promise<Task[]> => {
+    const snap = await fdb().collection('tasks').where('deal_id', '==', dealId).get();
+    const tasks = snapToDocs<Task>(snap);
+    return tasks.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  },
+};
+
+// ─── Invoice Operations ───────────────────────────────────────
+
+export const InvoiceDB = {
+  create: async (invoice: Invoice): Promise<string> => {
+    const now = new Date().toISOString();
+    const ref = await fdb().collection('invoices').add({
+      deal_id: invoice.deal_id,
+      invoice_number: invoice.invoice_number,
+      invoice_date: invoice.invoice_date || null,
+      due_date: invoice.due_date || null,
+      customer_name: invoice.customer_name,
+      customer_afm: invoice.customer_afm,
+      customer_doy: invoice.customer_doy || null,
+      customer_address: invoice.customer_address || null,
+      customer_email: invoice.customer_email || null,
+      line_items: invoice.line_items,
+      subtotal: invoice.subtotal,
+      fpa_rate: invoice.fpa_rate || 0.24,
+      fpa_amount: invoice.fpa_amount,
+      total_amount: invoice.total_amount,
+      payment_terms: invoice.payment_terms || 'Net 30',
+      payment_status: invoice.payment_status || 'unpaid',
+      status: invoice.status || 'draft',
+      created_at: now,
+      updated_at: now,
+    });
+    return ref.id;
+  },
+
+  findById: async (id: string): Promise<Invoice | undefined> => {
+    const doc = await fdb().collection('invoices').doc(id).get();
+    return docToObj<Invoice>(doc);
+  },
+
+  findByDeal: async (dealId: string): Promise<Invoice | undefined> => {
+    const snap = await fdb().collection('invoices').where('deal_id', '==', dealId).get();
+    if (snap.empty) return undefined;
+    const docs = snapToDocs<Invoice>(snap);
+    return docs.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0];
+  },
+
+  all: async (): Promise<Invoice[]> => {
+    const snap = await fdb().collection('invoices').orderBy('created_at', 'desc').get();
+    return snapToDocs<Invoice>(snap);
+  },
+
+  getNextInvoiceNumber: async (): Promise<string> => {
+    const year = new Date().getFullYear();
+    const counterRef = fdb().doc(`counters/invoices_${year}`);
+    const count = await fdb().runTransaction(async (tx) => {
+      const doc = await tx.get(counterRef);
+      const next = (doc.exists ? (doc.data()!.count as number) : 0) + 1;
+      tx.set(counterRef, { count: next });
+      return next;
+    });
+    return `${year}/${String(count).padStart(3, '0')}`;
+  },
+};
+
+// ─── Email Operations ─────────────────────────────────────────
+
+export const EmailDB = {
+  create: async (email: Email): Promise<string> => {
+    const now = new Date().toISOString();
+    const ref = await fdb().collection('emails').add({
+      task_id: email.task_id || null,
+      deal_id: email.deal_id || null,
+      invoice_id: email.invoice_id || null,
+      recipient_email: email.recipient_email,
+      recipient_name: email.recipient_name,
+      subject: email.subject,
+      body: email.body,
+      email_type: email.email_type || null,
+      status: email.status || 'pending',
+      error_message: email.error_message || null,
+      created_at: now,
+      sent_at: email.status === 'sent' ? now : null,
+    });
+    return ref.id;
+  },
+
+  update: async (id: string, updates: Partial<Email>): Promise<void> => {
+    const { id: _id, ...rest } = updates as any;
+    const data: any = { ...rest };
+    if (data.status === 'sent') data.sent_at = new Date().toISOString();
+    await fdb().collection('emails').doc(id).update(data);
+  },
+
+  findById: async (id: string): Promise<Email | undefined> => {
+    const doc = await fdb().collection('emails').doc(id).get();
+    return docToObj<Email>(doc);
+  },
+
+  all: async (): Promise<Email[]> => {
+    const snap = await fdb().collection('emails').orderBy('created_at', 'desc').get();
+    return snapToDocs<Email>(snap);
+  },
+
+  // Used by email-transport.ts to match inbox replies to our sent emails
+  findSent: async (): Promise<Array<{ id: string; deal_id: string | null; recipient_email: string; subject: string }>> => {
+    const snap = await fdb().collection('emails').where('status', '==', 'sent').get();
+    return snap.docs.map(d => ({
+      id: d.id,
+      deal_id: (d.data().deal_id as string | null) || null,
+      recipient_email: d.data().recipient_email as string,
+      subject: d.data().subject as string,
+    }));
+  },
+
+  findSentByDeal: async (dealId: string): Promise<Array<{ id: string; recipient_email: string; subject: string; created_at: string }>> => {
+    const snap = await fdb().collection('emails').where('deal_id', '==', dealId).get();
+    const docs = snap.docs
+      .filter(d => d.data().status === 'sent')
+      .map(d => ({
+        id: d.id,
+        recipient_email: d.data().recipient_email as string,
+        subject: d.data().subject as string,
+        created_at: (d.data().created_at as string) || '',
+      }));
+    return docs.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  },
+};
+
+// ─── Legal Validation Operations ──────────────────────────────
+
+export const LegalValidationDB = {
+  create: async (validation: LegalValidation): Promise<string> => {
+    const now = new Date().toISOString();
+    const ref = await fdb().collection('legal_validations').add({
+      deal_id: validation.deal_id,
+      afm_valid: validation.afm_valid ?? false,
+      afm_number: validation.afm_number || null,
+      company_registry_valid: validation.company_registry_valid ?? false,
+      gdpr_compliant: validation.gdpr_compliant ?? false,
+      contract_terms_valid: validation.contract_terms_valid ?? false,
+      risk_level: validation.risk_level || null,
+      risk_flags: validation.risk_flags || null,
+      approval_status: validation.approval_status || 'pending',
+      approval_notes: validation.approval_notes || null,
+      reviewed_at: null,
+      created_at: now,
+    });
+    return ref.id;
+  },
+
+  findByDeal: async (dealId: string): Promise<LegalValidation | undefined> => {
+    const snap = await fdb().collection('legal_validations').where('deal_id', '==', dealId).get();
+    if (snap.empty) return undefined;
+    const docs = snapToDocs<LegalValidation>(snap);
+    return docs.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0];
+  },
+
+  update: async (id: string, updates: Partial<LegalValidation>): Promise<void> => {
+    const { id: _id, ...rest } = updates as any;
+    const data: any = { ...rest };
+    if (data.approval_status && data.approval_status !== 'pending') {
+      data.reviewed_at = new Date().toISOString();
+    }
+    await fdb().collection('legal_validations').doc(id).update(data);
+  },
+};
+
+// ─── Audit Log ────────────────────────────────────────────────
+
+export const AuditLog = {
+  // Fire-and-forget: keeps synchronous call signature so callers need no await
+  log: (agentType: string, action: string, entityType?: string, entityId?: string, details?: any): void => {
+    fdb().collection('audit_log').add({
+      agent_type: agentType,
+      action,
+      entity_type: entityType || null,
+      entity_id: entityId || null,
+      details: details ? JSON.stringify(details) : null,
+      timestamp: new Date().toISOString(),
+    }).catch(e => console.error('AuditLog write failed:', e));
+  },
+
+  getRecent: async (limit: number = 50): Promise<any[]> => {
+    const snap = await fdb().collection('audit_log').orderBy('timestamp', 'desc').limit(limit).get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  },
+};
+
+// ─── Company Profile ──────────────────────────────────────────
+
+export const CompanyProfileDB = {
+  get: async (): Promise<CompanyProfile | undefined> => {
+    const doc = await fdb().doc('company_profiles/main').get();
+    return docToObj<CompanyProfile>(doc);
+  },
+
+  create: async (profile: CompanyProfile): Promise<string> => {
+    const now = new Date().toISOString();
+    await fdb().doc('company_profiles/main').set({
+      name: profile.name,
+      website: profile.website || null,
+      logo_path: profile.logo_path || null,
+      industry: profile.industry || null,
+      description: profile.description || null,
+      business_model: profile.business_model || null,
+      target_customers: profile.target_customers || null,
+      products_services: profile.products_services || null,
+      geographic_focus: profile.geographic_focus || null,
+      user_provided_text: profile.user_provided_text || null,
+      raw_scraped_data: profile.raw_scraped_data || null,
+      agent_context_json: profile.agent_context_json,
+      setup_complete: profile.setup_complete ?? true,
+      created_at: now,
+      updated_at: now,
+    });
+    return 'main';
+  },
+
+  update: async (_id: string, updates: Partial<CompanyProfile>): Promise<void> => {
+    const { id: __id, ...rest } = updates as any;
+    await fdb().doc('company_profiles/main').update({
+      ...rest,
+      updated_at: new Date().toISOString(),
+    });
+  },
+
+  isSetupComplete: async (): Promise<boolean> => {
+    const doc = await fdb().doc('company_profiles/main').get();
+    return doc.exists && doc.data()?.setup_complete === true;
+  },
 };

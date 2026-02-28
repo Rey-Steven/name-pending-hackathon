@@ -100,9 +100,9 @@ export interface EmailResult extends AgentResponse {
 export interface SSEEvent {
   type: 'agent_started' | 'agent_reasoning' | 'agent_completed' | 'agent_failed' | 'workflow_completed';
   agent: AgentType;
-  taskId?: number;
-  dealId?: number;
-  leadId?: number;
+  taskId?: string;
+  dealId?: string;
+  leadId?: string;
   message: string;
   reasoning?: string[];
   data?: Record<string, any>;
@@ -135,7 +135,7 @@ export interface AgentCompanyContexts {
 }
 
 export interface CompanyProfileContext {
-  id: number;
+  id: string;
   name: string;
   website?: string;
   logo_path?: string;
@@ -159,5 +159,5 @@ export interface CreateLeadRequest {
 }
 
 export interface TriggerWorkflowRequest {
-  leadId: number;
+  leadId: string;
 }

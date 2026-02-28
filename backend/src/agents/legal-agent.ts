@@ -35,7 +35,7 @@ ALWAYS respond with valid JSON in this exact format:
 }`;
   }
 
-  buildUserPrompt(input: { dealId: number; lead: any; salesResult: any }): string {
+  buildUserPrompt(input: { dealId: string; lead: any; salesResult: any }): string {
     const { lead, salesResult } = input;
     return `Review this deal for legal compliance:
 
@@ -57,21 +57,19 @@ Please verify AFM validity, company registry, GDPR compliance, contract terms, a
 Note: For this B2B transaction, generate a realistic AFM number for validation purposes.`;
   }
 
-  async reviewDeal(dealId: number, leadId: number, salesResult: any): Promise<LegalResult> {
-    const lead = LeadDB.findById(leadId);
+  async reviewDeal(dealId: string, leadId: string, salesResult: any): Promise<LegalResult> {
+    const lead = await LeadDB.findById(leadId);
     if (!lead) throw new Error(`Lead ${leadId} not found`);
 
-    // Execute AI review
     const result = await this.execute<LegalResult>(
       { dealId, lead, salesResult },
       { dealId, leadId }
     );
 
-    // Store legal validation
-    LegalValidationDB.create({
+    await LegalValidationDB.create({
       deal_id: dealId,
       afm_valid: result.data.afmValid,
-      afm_number: `${100000000 + Math.floor(Math.random() * 900000000)}`, // Generate mock AFM
+      afm_number: `${100000000 + Math.floor(Math.random() * 900000000)}`,
       company_registry_valid: result.data.companyRegistryValid,
       gdpr_compliant: result.data.gdprCompliant,
       contract_terms_valid: result.data.contractTermsValid,
@@ -81,11 +79,10 @@ Note: For this B2B transaction, generate a realistic AFM number for validation p
       approval_notes: result.data.notes,
     });
 
-    // Update deal status based on legal review
     if (result.data.approvalStatus === 'approved') {
-      DealDB.update(dealId, { status: 'invoicing' });
+      await DealDB.update(dealId, { status: 'invoicing' });
     } else if (result.data.approvalStatus === 'rejected') {
-      DealDB.update(dealId, { status: 'failed' });
+      await DealDB.update(dealId, { status: 'failed' });
     }
 
     return result;

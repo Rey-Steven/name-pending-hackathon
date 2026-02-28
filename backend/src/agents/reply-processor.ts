@@ -1,6 +1,6 @@
 import { BaseAgent } from './base-agent';
 import { AgentResponse } from '../types';
-import { db, EmailDB, LeadDB, DealDB } from '../database/db';
+import { EmailDB, LeadDB, DealDB } from '../database/db';
 import { sendRealEmail, fetchReplies, InboxEmail } from '../services/email-transport';
 
 interface ReplyResult extends AgentResponse {
@@ -56,22 +56,20 @@ ALWAYS respond with valid JSON:
     customerReply: string;
     customerName?: string;
     customerEmail?: string;
-    dealId?: number;
+    dealId?: string;
+    deal?: any;
+    lead?: any;
   }): string {
-    const { originalEmail, customerReply, customerName, customerEmail, dealId } = input;
+    const { originalEmail, customerReply, customerName, customerEmail, deal, lead } = input;
 
     let dealContext = '';
-    if (dealId) {
-      const deal = DealDB.findById(dealId);
-      if (deal) {
-        const lead = LeadDB.findById(deal.lead_id);
-        dealContext = `
+    if (deal) {
+      dealContext = `
 DEAL CONTEXT:
 - Product: ${deal.product_name}
 - Value: €${deal.total_amount}
 - Status: ${deal.status}
 - Company: ${lead?.company_name || 'Unknown'}`;
-      }
     }
 
     return `Analyze this customer reply and compose a professional Greek response:
@@ -90,20 +88,28 @@ ${dealContext}
 Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.recipient_email}" as recipientEmail.`;
   }
 
-  // Process a single reply with AI
   async processReply(input: {
     originalEmail: any;
     customerReply: string;
     customerName?: string;
     customerEmail?: string;
-    dealId?: number;
+    dealId?: string;
   }): Promise<{ replyResult: ReplyResult; sent: boolean; messageId?: string }> {
-    const result = await this.execute<ReplyResult>(input, { dealId: input.dealId });
+    // Pre-fetch deal and lead context so buildUserPrompt can use them synchronously
+    let deal: any = null;
+    let lead: any = null;
+    if (input.dealId) {
+      deal = await DealDB.findById(input.dealId);
+      if (deal) lead = await LeadDB.findById(deal.lead_id);
+    }
 
-    // Use the actual email from input, not AI hallucination
+    const result = await this.execute<ReplyResult>(
+      { ...input, deal, lead },
+      { dealId: input.dealId }
+    );
+
     const recipientEmail = input.customerEmail || input.originalEmail.recipient_email;
 
-    // Send the reply
     const sendResult = await sendRealEmail({
       to: recipientEmail,
       subject: result.data.subject,
@@ -112,8 +118,7 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
       references: input.originalEmail.message_id,
     });
 
-    // Store in DB
-    EmailDB.create({
+    await EmailDB.create({
       deal_id: input.dealId,
       recipient_email: recipientEmail,
       recipient_name: result.data.recipientName || input.customerName || '',
@@ -140,7 +145,6 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
     };
   }
 
-  // Check inbox for new replies and auto-process them
   async checkAndProcessReplies(): Promise<Array<{
     from: string;
     subject: string;
@@ -167,11 +171,9 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
     console.log(`  📥 Found ${replies.length} replies to process`);
 
     for (const reply of replies) {
-      // Skip if no matched email (not a reply to our sent emails)
       if (!reply.matchedEmailId) continue;
 
-      // Get the original sent email
-      const originalEmail = db.prepare('SELECT * FROM emails WHERE id = ?').get(reply.matchedEmailId) as any;
+      const originalEmail = await EmailDB.findById(reply.matchedEmailId);
       if (!originalEmail) continue;
 
       try {

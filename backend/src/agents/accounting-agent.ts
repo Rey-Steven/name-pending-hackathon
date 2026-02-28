@@ -56,7 +56,7 @@ ALWAYS respond with valid JSON in this exact format:
 }`;
   }
 
-  buildUserPrompt(input: { dealId: number; lead: any; salesResult: any }): string {
+  buildUserPrompt(input: { dealId: string; lead: any; salesResult: any }): string {
     const { lead, salesResult } = input;
     const today = new Date().toISOString().split('T')[0];
     const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -82,27 +82,24 @@ Due date: ${dueDate}
 Generate the full invoice and accounting entries.`;
   }
 
-  async generateInvoice(dealId: number, leadId: number, salesResult: any): Promise<AccountingResult> {
-    const lead = LeadDB.findById(leadId);
+  async generateInvoice(dealId: string, leadId: string, salesResult: any): Promise<AccountingResult> {
+    const lead = await LeadDB.findById(leadId);
     if (!lead) throw new Error(`Lead ${leadId} not found`);
 
-    // Execute AI
     const result = await this.execute<AccountingResult>(
       { dealId, lead, salesResult },
       { dealId, leadId }
     );
 
-    // Get next invoice number from database
-    const invoiceNumber = InvoiceDB.getNextInvoiceNumber();
+    const invoiceNumber = await InvoiceDB.getNextInvoiceNumber();
 
-    // Create invoice in database
-    const invoiceId = InvoiceDB.create({
+    const invoiceId = await InvoiceDB.create({
       deal_id: dealId,
       invoice_number: invoiceNumber,
       invoice_date: result.data.invoiceDate,
       due_date: result.data.dueDate,
       customer_name: lead.company_name,
-      customer_afm: `${100000000 + Math.floor(Math.random() * 900000000)}`, // Mock AFM
+      customer_afm: `${100000000 + Math.floor(Math.random() * 900000000)}`,
       customer_doy: 'ΔΟΥ Αθηνών',
       customer_address: 'Αθήνα, Ελλάδα',
       customer_email: lead.contact_email || '',
@@ -115,8 +112,7 @@ Generate the full invoice and accounting entries.`;
       status: 'draft',
     });
 
-    // Create task for Email to send invoice
-    TaskQueue.createTask({
+    await TaskQueue.createTask({
       sourceAgent: 'accounting',
       targetAgent: 'email',
       taskType: 'send_invoice',

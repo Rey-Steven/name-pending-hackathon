@@ -40,7 +40,7 @@ ${ctx}
   }
 
   // Execute the agent: call AI, parse response, log everything
-  async execute<T extends AgentResponse>(input: any, context?: { dealId?: number; leadId?: number; taskId?: number }): Promise<T> {
+  async execute<T extends AgentResponse>(input: any, context?: { dealId?: string; leadId?: string; taskId?: string }): Promise<T> {
     const startTime = Date.now();
 
     console.log(`\n${'='.repeat(50)}`);

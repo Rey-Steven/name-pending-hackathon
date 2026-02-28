@@ -6,19 +6,6 @@ import { callAI, parseJSONResponse } from '../services/ai-service';
 import { AuditLog } from '../database/db';
 import { broadcastEvent } from '../routes/dashboard.routes';
 
-const TEST_EMAIL_ALLOWLIST = new Set([
-  'k.kayioulis@butler.gr',
-  's.vasos@butler.gr',
-  'kagioulis.kostas@gmail.com',
-  'stevenvasos@gmail.com',
-  'co.scoo.bydoo@gmail.com',
-]);
-
-function isAllowedTestEmail(email?: string): boolean {
-  if (!email) return false;
-  return TEST_EMAIL_ALLOWLIST.has(email.toLowerCase());
-}
-
 export class SalesAgent extends BaseAgent {
   constructor(companyProfile: CompanyProfileContext | null = null) {
     super('sales', 'sonnet', companyProfile);
@@ -39,11 +26,6 @@ Pricing guidelines:
 - Volume discounts: 5% for orders > €10K, 10% for > €50K
 - Include applicable VAT/tax
 - Payment terms: Net 30 days standard
-
-Important qualification rules:
-- Never set qualification = "reject" solely because of email domain quality (free/personal domain, gmail, or test-looking inbox).
-- Approved test emails must be treated as valid for demo/testing and should not reduce qualification.
-- Reject only for clear business disqualification (no fit, no need, no budget, or explicit refusal). If uncertain, prefer "nurture".
 
 ALWAYS respond with valid JSON in this exact format:
 {
@@ -69,13 +51,12 @@ ALWAYS respond with valid JSON in this exact format:
 
   buildUserPrompt(input: { lead: Lead; marketingResult: any }): string {
     const { lead, marketingResult } = input;
-    const testEmailOverride = isAllowedTestEmail(lead.contact_email);
     return `Evaluate this qualified lead and decide on deal closure:
 
 LEAD INFORMATION:
 - Company: ${lead.company_name}
 - Contact: ${lead.contact_name} (${lead.contact_email || 'no email'})
-- Test Email Override: ${testEmailOverride ? 'YES - approved test email, treat as valid contact' : 'NO'}
+- Product Interest: ${lead.product_interest || 'General inquiry'}
 - Website: ${lead.company_website || 'N/A'}
 
 MARKETING ANALYSIS:
@@ -88,17 +69,14 @@ MARKETING ANALYSIS:
 Evaluate BANT criteria, decide to close/nurture/reject, and calculate pricing if closing.`;
   }
 
-  async processDeal(leadId: number, marketingResult: any): Promise<{ salesResult: SalesResult; dealId?: number }> {
-    const lead = LeadDB.findById(leadId);
+  async processDeal(leadId: string, marketingResult: any): Promise<{ salesResult: SalesResult; dealId?: string }> {
+    const lead = await LeadDB.findById(leadId);
     if (!lead) throw new Error(`Lead ${leadId} not found`);
 
-    // Execute AI analysis
     const result = await this.execute<SalesResult>({ lead, marketingResult }, { leadId });
 
     if (result.data.qualification === 'close') {
-      // Create deal with 'proposal_sent' status — NOT 'legal_review'
-      // Legal/Accounting only run after customer accepts the proposal
-      const dealId = DealDB.create({
+      const dealId = await DealDB.create({
         lead_id: leadId,
         deal_value: result.data.subtotal,
         product_name: result.data.productName,
@@ -118,11 +96,9 @@ Evaluate BANT criteria, decide to close/nurture/reject, and calculate pricing if
         status: 'proposal_sent',
       });
 
-      // Update lead status
-      LeadDB.update(leadId, { status: 'contacted' });
+      await LeadDB.update(leadId, { status: 'contacted' });
 
-      // Create ONLY the proposal email task — no Legal/Accounting yet
-      TaskQueue.createTask({
+      await TaskQueue.createTask({
         sourceAgent: 'sales',
         targetAgent: 'email',
         taskType: 'send_proposal',
@@ -136,22 +112,20 @@ Evaluate BANT criteria, decide to close/nurture/reject, and calculate pricing if
       return { salesResult: result, dealId };
     }
 
-    // If not closing, update lead status
-    LeadDB.update(leadId, { status: result.data.qualification === 'nurture' ? 'contacted' : 'rejected' });
+    await LeadDB.update(leadId, { status: result.data.qualification === 'nurture' ? 'contacted' : 'rejected' });
     return { salesResult: result };
   }
 
-  // Negotiation: analyze customer reply and decide next action
   async negotiateReply(params: {
-    dealId: number;
-    leadId: number;
+    dealId: string;
+    leadId: string;
     customerReply: string;
     currentDeal: any;
     roundNumber: number;
     maxRounds: number;
   }): Promise<NegotiationResult> {
     const { dealId, leadId, customerReply, currentDeal, roundNumber, maxRounds } = params;
-    const lead = LeadDB.findById(leadId);
+    const lead = await LeadDB.findById(leadId);
     if (!lead) throw new Error(`Lead ${leadId} not found`);
 
     const isLastRound = roundNumber >= maxRounds;
@@ -222,7 +196,6 @@ Analyze the customer's reply and decide your next move. Write your response emai
       const response = await callAI(systemPrompt, userPrompt, 'sonnet');
       const result = parseJSONResponse<NegotiationResult>(response.content);
 
-      // Log reasoning
       if (result.reasoning) {
         console.log(`\n  🧠 Negotiation reasoning:`);
         result.reasoning.forEach((step, i) => {

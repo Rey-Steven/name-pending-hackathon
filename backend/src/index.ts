@@ -4,7 +4,6 @@ dotenv.config({ path: '../.env' });
 import express from 'express';
 import cors from 'cors';
 import * as path from 'path';
-import { initializeDatabase } from './database/db';
 import { initEmailTransport } from './services/email-transport';
 import leadsRoutes from './routes/leads.routes';
 import dealsRoutes from './routes/deals.routes';
@@ -23,9 +22,6 @@ app.use(express.json());
 // Serve uploaded files (logos, documents)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Initialize database
-initializeDatabase();
-
 // Initialize email transport
 initEmailTransport();
 
@@ -42,7 +38,7 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Workflow trigger endpoint - will be wired to workflow engine later
+// Workflow trigger endpoint
 app.post('/api/workflow/start', async (req, res) => {
   try {
     const { leadId } = req.body;
@@ -50,10 +46,9 @@ app.post('/api/workflow/start', async (req, res) => {
       return res.status(400).json({ error: 'leadId is required' });
     }
 
-    // Import workflow engine (lazy import to avoid circular deps)
     const { WorkflowEngine } = await import('./services/workflow-engine');
     const engine = new WorkflowEngine();
-    const result = await engine.startWorkflow(leadId);
+    const result = await engine.startWorkflow(leadId as string);
 
     res.json({ success: true, ...result });
   } catch (error: any) {
@@ -67,14 +62,17 @@ const POLL_INTERVAL_MS = 30_000; // 30 seconds
 let polling = false;
 
 async function pollForReplies() {
-  if (polling) return; // skip if previous poll still running
+  if (polling) return;
   polling = true;
 
   try {
-    const { db } = await import('./database/db');
-    const activeDeals = db.prepare(
-      `SELECT id FROM deals WHERE status IN ('proposal_sent', 'negotiating')`
-    ).all() as Array<{ id: number }>;
+    const { getFirestore } = await import('./database/firebase');
+    const snap = await getFirestore()
+      .collection('deals')
+      .where('status', 'in', ['proposal_sent', 'negotiating'])
+      .get();
+
+    const activeDeals = snap.docs.map(d => ({ id: d.id }));
 
     if (activeDeals.length === 0) {
       polling = false;

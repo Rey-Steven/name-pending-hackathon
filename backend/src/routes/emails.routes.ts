@@ -1,13 +1,13 @@
 import { Router, Request, Response } from 'express';
-import { EmailDB, db } from '../database/db';
+import { EmailDB } from '../database/db';
 import { fetchInbox, fetchUnread, fetchReplies, sendRealEmail } from '../services/email-transport';
 
 const router = Router();
 
 // GET /api/emails - Get all sent emails from our database
-router.get('/', (_req: Request, res: Response) => {
+router.get('/', async (_req: Request, res: Response) => {
   try {
-    const emails = EmailDB.all();
+    const emails = await EmailDB.all();
     res.json(emails);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -51,16 +51,14 @@ router.get('/replies', async (_req: Request, res: Response) => {
 // POST /api/emails/reply/:id - AI-powered reply to a specific email thread
 router.post('/reply/:id', async (req: Request, res: Response) => {
   try {
-    const emailId = parseInt(req.params.id);
     const { customMessage } = req.body;
 
     // Get the original sent email from our DB
-    const sentEmail = db.prepare('SELECT * FROM emails WHERE id = ?').get(emailId) as any;
+    const sentEmail = await EmailDB.findById(req.params.id);
     if (!sentEmail) {
       return res.status(404).json({ error: 'Email not found' });
     }
 
-    // Import reply processor (lazy to avoid circular deps)
     const { ReplyProcessor } = await import('../agents/reply-processor');
     const processor = new ReplyProcessor();
 

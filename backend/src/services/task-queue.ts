@@ -1,23 +1,19 @@
 import { TaskDB, Task } from '../database/db';
 import { AgentType } from '../types';
 
-// Simple in-memory task queue (no Redis needed for hackathon)
-// Tasks are stored in SQLite and processed immediately
-
 export class TaskQueue {
-  // Create a new task and queue it for processing
-  static createTask(params: {
+  static async createTask(params: {
     sourceAgent: AgentType;
     targetAgent: AgentType;
     taskType: string;
     title: string;
     description?: string;
     inputData: any;
-    dealId?: number;
-    leadId?: number;
+    dealId?: string;
+    leadId?: string;
     priority?: number;
-  }): number {
-    const taskId = TaskDB.create({
+  }): Promise<string> {
+    const taskId = await TaskDB.create({
       source_agent: params.sourceAgent,
       target_agent: params.targetAgent,
       task_type: params.taskType,
@@ -33,35 +29,30 @@ export class TaskQueue {
     return taskId;
   }
 
-  // Mark task as processing
-  static startProcessing(taskId: number) {
-    TaskDB.update(taskId, { status: 'processing' });
+  static async startProcessing(taskId: string): Promise<void> {
+    await TaskDB.update(taskId, { status: 'processing' });
   }
 
-  // Mark task as completed
-  static complete(taskId: number, outputData?: any) {
-    TaskDB.update(taskId, {
+  static async complete(taskId: string, outputData?: any): Promise<void> {
+    await TaskDB.update(taskId, {
       status: 'completed',
       output_data: outputData ? JSON.stringify(outputData) : undefined,
     });
   }
 
-  // Mark task as failed
-  static fail(taskId: number, error: string) {
-    TaskDB.update(taskId, {
+  static async fail(taskId: string, error: string): Promise<void> {
+    await TaskDB.update(taskId, {
       status: 'failed',
       error_message: error,
     });
   }
 
-  // Get pending tasks for an agent
-  static getPending(targetAgent: AgentType): Task[] {
+  static async getPending(targetAgent: AgentType): Promise<Task[]> {
     return TaskDB.findPending(targetAgent);
   }
 
-  // Get task with parsed input data
-  static getTaskWithData(taskId: number): (Task & { parsedInput: any }) | null {
-    const task = TaskDB.findById(taskId);
+  static async getTaskWithData(taskId: string): Promise<(Task & { parsedInput: any }) | null> {
+    const task = await TaskDB.findById(taskId);
     if (!task) return null;
     return {
       ...task,

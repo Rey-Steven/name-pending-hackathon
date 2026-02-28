@@ -9,8 +9,8 @@ import { broadcastEvent } from '../routes/dashboard.routes';
 import { CompanyProfileContext } from '../types';
 import { fetchRepliesForDeal, sendRealEmail } from './email-transport';
 
-function loadCompanyProfile(): CompanyProfileContext | null {
-  const raw = CompanyProfileDB.get();
+async function loadCompanyProfile(): Promise<CompanyProfileContext | null> {
+  const raw = await CompanyProfileDB.get();
   if (!raw) return null;
   try {
     const agentContexts = JSON.parse(raw.agent_context_json || '{}');
@@ -36,9 +36,8 @@ const MAX_NEGOTIATION_ROUNDS = 3;
 
 export class WorkflowEngine {
 
-  // Create all agents loaded with the current company profile
-  private createAgents() {
-    const companyProfile = loadCompanyProfile();
+  private async createAgents() {
+    const companyProfile = await loadCompanyProfile();
     return {
       companyProfile,
       marketingAgent: new MarketingAgent(companyProfile),
@@ -51,10 +50,10 @@ export class WorkflowEngine {
 
   // ─── PHASE 1: Lead → Marketing → Sales → Proposal Email → STOP ───
 
-  async startWorkflow(leadId: number) {
+  async startWorkflow(leadId: string) {
     const startTime = Date.now();
 
-    const { companyProfile, marketingAgent, salesAgent, emailService } = this.createAgents();
+    const { companyProfile, marketingAgent, salesAgent, emailService } = await this.createAgents();
 
     console.log('\n' + '═'.repeat(60));
     console.log('  🚀 WORKFLOW PHASE 1 - Lead Qualification & Proposal');
@@ -97,12 +96,12 @@ export class WorkflowEngine {
       // PHASE 1c: Send proposal email
       console.log('\n📍 PHASE 1c: Email Agent - Sending Proposal');
 
-      const emailTasks = TaskQueue.getPending('email');
+      const emailTasks = await TaskQueue.getPending('email');
       for (const task of emailTasks) {
-        const taskData = TaskQueue.getTaskWithData(task.id!);
+        const taskData = await TaskQueue.getTaskWithData(task.id!);
         if (!taskData) continue;
 
-        TaskQueue.startProcessing(task.id!);
+        await TaskQueue.startProcessing(task.id!);
         try {
           await emailService.sendEmail(
             taskData.parsedInput.leadId,
@@ -112,10 +111,10 @@ export class WorkflowEngine {
               salesResult: taskData.parsedInput.salesResult,
             }
           );
-          TaskQueue.complete(task.id!, { processed: true });
+          await TaskQueue.complete(task.id!, { processed: true });
         } catch (error: any) {
           console.error(`  ❌ Email task ${task.id} failed:`, error.message);
-          TaskQueue.fail(task.id!, error.message);
+          await TaskQueue.fail(task.id!, error.message);
         }
       }
 
@@ -160,19 +159,19 @@ export class WorkflowEngine {
 
   // ─── PHASE 2: Check Reply → Negotiate or Complete ───
 
-  async processReply(dealId: number) {
+  async processReply(dealId: string) {
     const startTime = Date.now();
-    const deal = DealDB.findById(dealId);
+    const deal = await DealDB.findById(dealId);
     if (!deal) throw new Error(`Deal ${dealId} not found`);
 
     if (!['proposal_sent', 'negotiating'].includes(deal.status || '')) {
       throw new Error(`Deal ${dealId} is in '${deal.status}' status - not awaiting reply`);
     }
 
-    const lead = LeadDB.findById(deal.lead_id);
+    const lead = await LeadDB.findById(deal.lead_id);
     if (!lead) throw new Error(`Lead ${deal.lead_id} not found`);
 
-    const { salesAgent } = this.createAgents();
+    const { salesAgent } = await this.createAgents();
 
     console.log('\n' + '═'.repeat(60));
     console.log('  📥 CHECKING FOR CUSTOMER REPLY');
@@ -180,7 +179,6 @@ export class WorkflowEngine {
     console.log(`  🔄 Round: ${(deal.negotiation_round || 0) + 1} of ${MAX_NEGOTIATION_ROUNDS}`);
     console.log('═'.repeat(60));
 
-    // Fetch replies for this specific deal
     const reply = await fetchRepliesForDeal(dealId);
 
     if (!reply) {
@@ -199,7 +197,6 @@ export class WorkflowEngine {
 
     const roundNumber = (deal.negotiation_round || 0) + 1;
 
-    // Sales Agent analyzes the reply
     const negotiationResult = await salesAgent.negotiateReply({
       dealId,
       leadId: deal.lead_id,
@@ -215,19 +212,18 @@ export class WorkflowEngine {
     if (action === 'accept') {
       console.log('\n  ✅ CUSTOMER ACCEPTED - Triggering Legal → Accounting → Invoice');
 
-      DealDB.update(dealId, {
+      await DealDB.update(dealId, {
         status: 'legal_review',
         negotiation_round: roundNumber,
       });
-      LeadDB.update(deal.lead_id, { status: 'converted' });
+      await LeadDB.update(deal.lead_id, { status: 'converted' });
 
-      // Send acceptance response email
       await sendRealEmail({
         to: lead.contact_email!,
         subject: negotiationResult.data.responseSubject,
         body: negotiationResult.data.responseBody,
       });
-      EmailDB.create({
+      await EmailDB.create({
         deal_id: dealId,
         recipient_email: lead.contact_email!,
         recipient_name: lead.contact_name,
@@ -237,7 +233,6 @@ export class WorkflowEngine {
         status: 'sent',
       });
 
-      // Now run the rest of the pipeline: Legal → Accounting → Invoice Email
       const completionResult = await this.completeWorkflow(dealId, deal.lead_id, deal);
       const duration = Date.now() - startTime;
 
@@ -256,7 +251,6 @@ export class WorkflowEngine {
     if (action === 'counter_offer') {
       console.log('\n  🤝 SENDING COUNTER-OFFER');
 
-      // Update deal with revised pricing if provided
       const updates: any = {
         status: 'negotiating',
         negotiation_round: roundNumber,
@@ -271,22 +265,21 @@ export class WorkflowEngine {
       if (negotiationResult.data.revisedTotal) {
         updates.total_amount = negotiationResult.data.revisedTotal;
       }
-      DealDB.update(dealId, updates);
+      await DealDB.update(dealId, updates);
 
-      // Send counter-offer email
       const sendResult = await sendRealEmail({
         to: lead.contact_email!,
         subject: negotiationResult.data.responseSubject,
         body: negotiationResult.data.responseBody,
       });
 
-      EmailDB.create({
+      await EmailDB.create({
         deal_id: dealId,
         recipient_email: lead.contact_email!,
         recipient_name: lead.contact_name,
         subject: negotiationResult.data.responseSubject,
         body: negotiationResult.data.responseBody,
-        email_type: 'counter_offer' as any,
+        email_type: 'follow_up' as any,
         status: sendResult.sent ? 'sent' : 'failed',
         error_message: sendResult.error,
       });
@@ -323,26 +316,25 @@ export class WorkflowEngine {
     // ─── HANDLE: Give up ───
     console.log('\n  ❌ DEAL FAILED - Sending closing email');
 
-    DealDB.update(dealId, {
+    await DealDB.update(dealId, {
       status: 'failed',
       negotiation_round: roundNumber,
       sales_notes: `FAILED: ${negotiationResult.data.failureReason || 'Customer declined after max rounds'}`,
     });
 
-    // Send polite closing email
     const sendResult = await sendRealEmail({
       to: lead.contact_email!,
       subject: negotiationResult.data.responseSubject,
       body: negotiationResult.data.responseBody,
     });
 
-    EmailDB.create({
+    await EmailDB.create({
       deal_id: dealId,
       recipient_email: lead.contact_email!,
       recipient_name: lead.contact_name,
       subject: negotiationResult.data.responseSubject,
       body: negotiationResult.data.responseBody,
-      email_type: 'closing' as any,
+      email_type: 'follow_up' as any,
       status: sendResult.sent ? 'sent' : 'failed',
       error_message: sendResult.error,
     });
@@ -382,10 +374,10 @@ export class WorkflowEngine {
 
   // ─── Complete workflow after acceptance: Legal → Accounting → Invoice ───
 
-  private async completeWorkflow(dealId: number, leadId: number, deal: any) {
+  private async completeWorkflow(dealId: string, leadId: string, deal: any) {
     console.log('\n📍 Running Legal → Accounting → Invoice pipeline');
 
-    const { legalAgent, accountingAgent, emailService } = this.createAgents();
+    const { legalAgent, accountingAgent, emailService } = await this.createAgents();
 
     const salesData = {
       productName: deal.product_name,
@@ -413,13 +405,13 @@ export class WorkflowEngine {
       console.error(`  ❌ Invoice generation failed: ${error.message}`);
     }
 
-    // Send invoice email (check if accounting created a task)
-    const invoiceEmailTasks = TaskQueue.getPending('email');
+    // Send invoice email
+    const invoiceEmailTasks = await TaskQueue.getPending('email');
     for (const task of invoiceEmailTasks) {
-      const taskData = TaskQueue.getTaskWithData(task.id!);
+      const taskData = await TaskQueue.getTaskWithData(task.id!);
       if (!taskData) continue;
 
-      TaskQueue.startProcessing(task.id!);
+      await TaskQueue.startProcessing(task.id!);
       try {
         await emailService.sendEmail(
           taskData.parsedInput.leadId,
@@ -431,15 +423,14 @@ export class WorkflowEngine {
             invoiceId: taskData.parsedInput.invoiceId,
           }
         );
-        TaskQueue.complete(task.id!, { processed: true });
+        await TaskQueue.complete(task.id!, { processed: true });
       } catch (error: any) {
         console.error(`  ❌ Invoice email failed: ${error.message}`);
-        TaskQueue.fail(task.id!, error.message);
+        await TaskQueue.fail(task.id!, error.message);
       }
     }
 
-    // Mark deal completed
-    DealDB.update(dealId, { status: 'completed' });
+    await DealDB.update(dealId, { status: 'completed' });
 
     AuditLog.log('workflow', 'workflow_completed', 'deal', dealId, { leadId, dealId });
 

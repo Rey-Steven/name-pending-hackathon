@@ -97,33 +97,28 @@ Write the email in Greek language. Use the EXACT email address "${lead.contact_e
   }
 
   async sendEmail(
-    leadId: number,
+    leadId: string,
     emailType: 'proposal' | 'confirmation' | 'invoice' | 'follow_up',
-    context: { dealId?: number; salesResult?: any; invoiceData?: any; invoiceNumber?: string; invoiceId?: number }
+    context: { dealId?: string; salesResult?: any; invoiceData?: any; invoiceNumber?: string; invoiceId?: string }
   ): Promise<EmailResult> {
-    const lead = LeadDB.findById(leadId);
+    const lead = await LeadDB.findById(leadId);
     if (!lead) throw new Error(`Lead ${leadId} not found`);
 
-    // Execute AI to compose email
     const result = await this.execute<EmailResult>(
       { lead, emailType, ...context },
       { dealId: context.dealId, leadId }
     );
 
-    // Use the lead's actual email, not whatever the AI returns
     const recipientEmail = lead.contact_email || result.data.recipientEmail;
     const recipientName = result.data.recipientName || lead.contact_name;
 
-    // Send real email via Gmail SMTP
     const sendResult = await sendRealEmail({
       to: recipientEmail,
       subject: result.data.subject,
       body: result.data.body,
     });
 
-    // Store email in database
-    EmailDB.create({
-      task_id: undefined,
+    await EmailDB.create({
       deal_id: context.dealId,
       invoice_id: context.invoiceId,
       recipient_email: recipientEmail,

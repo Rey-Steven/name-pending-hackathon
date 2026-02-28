@@ -37,8 +37,8 @@ export const upload = multer({
 });
 
 // GET /api/company - get current company profile
-router.get('/', (_req: Request, res: Response) => {
-  const profile = CompanyProfileDB.get();
+router.get('/', async (_req: Request, res: Response) => {
+  const profile = await CompanyProfileDB.get();
   if (!profile) {
     return res.status(404).json({ error: 'No company profile found' });
   }
@@ -50,8 +50,8 @@ router.get('/', (_req: Request, res: Response) => {
 });
 
 // GET /api/company/setup-status
-router.get('/setup-status', (_req: Request, res: Response) => {
-  const setupComplete = CompanyProfileDB.isSetupComplete();
+router.get('/setup-status', async (_req: Request, res: Response) => {
+  const setupComplete = await CompanyProfileDB.isSetupComplete();
   res.json({ setupComplete });
 });
 
@@ -100,49 +100,37 @@ router.post(
         documentTexts: documentTexts.length > 0 ? documentTexts : undefined,
       });
 
-      // 4. Save to database (delete any previous profile first for single-tenant)
-      const existing = CompanyProfileDB.get();
+      // 4. Save to database (upsert — single-tenant fixed doc ID 'main')
+      const existing = await CompanyProfileDB.get();
       const logoPath = logoFile ? `uploads/logos/${logoFile.filename}` : existing?.logo_path;
 
+      const profileData = {
+        name,
+        website: website || undefined,
+        logo_path: logoPath,
+        industry: profileResult.industry,
+        description: profileResult.description,
+        business_model: profileResult.business_model,
+        target_customers: profileResult.target_customers,
+        products_services: profileResult.products_services,
+        geographic_focus: profileResult.geographic_focus,
+        user_provided_text: userText || undefined,
+        raw_scraped_data: scrapedText || undefined,
+        agent_context_json: JSON.stringify(profileResult.agentContexts),
+        setup_complete: true,
+      };
+
       if (existing?.id) {
-        CompanyProfileDB.update(existing.id, {
-          name,
-          website: website || undefined,
-          logo_path: logoPath,
-          industry: profileResult.industry,
-          description: profileResult.description,
-          business_model: profileResult.business_model,
-          target_customers: profileResult.target_customers,
-          products_services: profileResult.products_services,
-          geographic_focus: profileResult.geographic_focus,
-          user_provided_text: userText || undefined,
-          raw_scraped_data: scrapedText || undefined,
-          agent_context_json: JSON.stringify(profileResult.agentContexts),
-          setup_complete: 1,
-        });
+        await CompanyProfileDB.update(existing.id, profileData);
       } else {
-        CompanyProfileDB.create({
-          name,
-          website: website || undefined,
-          logo_path: logoPath,
-          industry: profileResult.industry,
-          description: profileResult.description,
-          business_model: profileResult.business_model,
-          target_customers: profileResult.target_customers,
-          products_services: profileResult.products_services,
-          geographic_focus: profileResult.geographic_focus,
-          user_provided_text: userText || undefined,
-          raw_scraped_data: scrapedText || undefined,
-          agent_context_json: JSON.stringify(profileResult.agentContexts),
-          setup_complete: 1,
-        });
+        await CompanyProfileDB.create(profileData as any);
       }
 
-      const saved = CompanyProfileDB.get()!;
+      const saved = await CompanyProfileDB.get();
 
       res.json({
         ...saved,
-        agent_context_json: JSON.parse(saved.agent_context_json),
+        agent_context_json: JSON.parse(saved!.agent_context_json),
       });
     } catch (err: any) {
       console.error('Company setup error:', err);
@@ -153,18 +141,18 @@ router.post(
 
 // PUT /api/company - update basic fields (no re-scrape)
 router.put('/', async (req: Request, res: Response) => {
-  const profile = CompanyProfileDB.get();
+  const profile = await CompanyProfileDB.get();
   if (!profile?.id) {
     return res.status(404).json({ error: 'No company profile found' });
   }
   const { name, website, industry } = req.body;
-  CompanyProfileDB.update(profile.id, { name, website, industry });
+  await CompanyProfileDB.update(profile.id, { name, website, industry });
   res.json({ success: true });
 });
 
 // POST /api/company/rescrape - re-run scraping + re-profile
 router.post('/rescrape', async (_req: Request, res: Response) => {
-  const profile = CompanyProfileDB.get();
+  const profile = await CompanyProfileDB.get();
   if (!profile?.id) {
     return res.status(404).json({ error: 'No company profile found' });
   }
@@ -183,7 +171,7 @@ router.post('/rescrape', async (_req: Request, res: Response) => {
       scrapedWebsiteText: scrapedText || undefined,
     });
 
-    CompanyProfileDB.update(profile.id, {
+    await CompanyProfileDB.update(profile.id, {
       industry: profileResult.industry,
       description: profileResult.description,
       business_model: profileResult.business_model,
@@ -194,8 +182,8 @@ router.post('/rescrape', async (_req: Request, res: Response) => {
       agent_context_json: JSON.stringify(profileResult.agentContexts),
     });
 
-    const updated = CompanyProfileDB.get()!;
-    res.json({ ...updated, agent_context_json: JSON.parse(updated.agent_context_json) });
+    const updated = await CompanyProfileDB.get();
+    res.json({ ...updated, agent_context_json: JSON.parse(updated!.agent_context_json) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

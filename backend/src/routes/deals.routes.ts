@@ -4,9 +4,9 @@ import { DealDB, LeadDB, InvoiceDB, LegalValidationDB, TaskDB } from '../databas
 const router = Router();
 
 // GET /api/deals - Get all deals
-router.get('/', (_req: Request, res: Response) => {
+router.get('/', async (_req: Request, res: Response) => {
   try {
-    const deals = DealDB.all();
+    const deals = await DealDB.all();
     res.json(deals);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -14,27 +14,23 @@ router.get('/', (_req: Request, res: Response) => {
 });
 
 // GET /api/deals/:id - Get deal with full details
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const dealId = parseInt(req.params.id);
-    const deal = DealDB.findById(dealId);
+    const dealId = req.params.id;
+    const deal = await DealDB.findById(dealId);
     if (!deal) {
       return res.status(404).json({ error: 'Deal not found' });
     }
 
-    // Get related data
-    const lead = deal.lead_id ? LeadDB.findById(deal.lead_id) : null;
-    const invoice = InvoiceDB.findByDeal(dealId);
-    const legalValidation = LegalValidationDB.findByDeal(dealId);
-    const tasks = TaskDB.findByDeal(dealId);
+    // Get related data in parallel
+    const [lead, invoice, legalValidation, tasks] = await Promise.all([
+      deal.lead_id ? LeadDB.findById(deal.lead_id) : Promise.resolve(null),
+      InvoiceDB.findByDeal(dealId),
+      LegalValidationDB.findByDeal(dealId),
+      TaskDB.findByDeal(dealId),
+    ]);
 
-    res.json({
-      ...deal,
-      lead,
-      invoice,
-      legalValidation,
-      tasks,
-    });
+    res.json({ ...deal, lead, invoice, legalValidation, tasks });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -43,8 +39,8 @@ router.get('/:id', (req: Request, res: Response) => {
 // POST /api/deals/:id/check-reply - Check inbox for customer reply and negotiate
 router.post('/:id/check-reply', async (req: Request, res: Response) => {
   try {
-    const dealId = parseInt(req.params.id);
-    const deal = DealDB.findById(dealId);
+    const dealId = req.params.id;
+    const deal = await DealDB.findById(dealId);
 
     if (!deal) {
       return res.status(404).json({ error: 'Deal not found' });
@@ -56,7 +52,6 @@ router.post('/:id/check-reply', async (req: Request, res: Response) => {
       });
     }
 
-    // Lazy import to avoid circular deps
     const { WorkflowEngine } = await import('../services/workflow-engine');
     const engine = new WorkflowEngine();
     const result = await engine.processReply(dealId);

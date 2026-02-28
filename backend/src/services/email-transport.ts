@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
-import { db } from '../database/db';
+import { EmailDB } from '../database/db';
 
 let transporter: nodemailer.Transporter | null = null;
 
@@ -230,13 +230,11 @@ export async function fetchUnread(): Promise<InboxEmail[]> {
 }
 
 // Match inbox replies to our sent emails
-export async function fetchReplies(): Promise<Array<InboxEmail & { matchedEmailId?: number; matchedDealId?: number }>> {
+export async function fetchReplies(): Promise<Array<InboxEmail & { matchedEmailId?: string; matchedDealId?: string | null }>> {
   const inbox = await fetchInbox(50);
 
   // Get all sent emails from our database
-  const sentEmails = db.prepare(`
-    SELECT id, deal_id, recipient_email, subject FROM emails WHERE status = 'sent'
-  `).all() as Array<{ id: number; deal_id: number; recipient_email: string; subject: string }>;
+  const sentEmails = await EmailDB.findSent();
 
   const gmailUser = process.env.GMAIL_USER || '';
 
@@ -262,13 +260,9 @@ export async function fetchReplies(): Promise<Array<InboxEmail & { matchedEmailI
 }
 
 // Fetch the most recent reply for a specific deal
-export async function fetchRepliesForDeal(dealId: number): Promise<InboxEmail | null> {
+export async function fetchRepliesForDeal(dealId: string): Promise<InboxEmail | null> {
   // Get all sent emails for this deal
-  const sentEmails = db.prepare(`
-    SELECT id, recipient_email, subject, created_at FROM emails
-    WHERE deal_id = ? AND status = 'sent'
-    ORDER BY created_at DESC
-  `).all(dealId) as Array<{ id: number; recipient_email: string; subject: string; created_at: string }>;
+  const sentEmails = await EmailDB.findSentByDeal(dealId);
 
   if (sentEmails.length === 0) return null;
 
