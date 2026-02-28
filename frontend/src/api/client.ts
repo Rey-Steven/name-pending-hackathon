@@ -1,0 +1,60 @@
+import axios from 'axios'
+
+const api = axios.create({
+  baseURL: '/api',
+  headers: { 'Content-Type': 'application/json' },
+})
+
+export const leadsApi = {
+  getAll: () => api.get('/leads'),
+  getById: (id: number) => api.get(`/leads/${id}`),
+  create: (data: {
+    companyName: string
+    contactName: string
+    contactEmail?: string
+    contactPhone?: string
+    productInterest?: string
+    companyWebsite?: string
+  }) => api.post('/leads', data),
+}
+
+export const dealsApi = {
+  getAll: () => api.get('/deals'),
+  getById: (id: number) => api.get(`/deals/${id}`),
+}
+
+export const tasksApi = {
+  getAll: () => api.get('/tasks'),
+  getByAgent: (agentType: string) => api.get(`/tasks/agent/${agentType}`),
+}
+
+export const dashboardApi = {
+  getStats: () => api.get('/dashboard/stats'),
+  getAudit: () => api.get('/dashboard/audit'),
+}
+
+export const workflowApi = {
+  start: (leadId: number) => api.post('/workflow/start', { leadId }),
+}
+
+// SSE connection for real-time events
+export function connectToEvents(onEvent: (event: any) => void): EventSource {
+  const eventSource = new EventSource('/api/dashboard/events')
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data)
+      onEvent(data)
+    } catch (e) {
+      // Ignore parse errors (heartbeats)
+    }
+  }
+
+  eventSource.onerror = () => {
+    console.warn('SSE connection error, will auto-reconnect')
+  }
+
+  return eventSource
+}
+
+export default api

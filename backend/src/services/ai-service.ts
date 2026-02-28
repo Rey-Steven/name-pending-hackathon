@@ -1,0 +1,67 @@
+import Anthropic from '@anthropic-ai/sdk';
+
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+export type ModelTier = 'sonnet' | 'haiku';
+
+const MODELS: Record<ModelTier, string> = {
+  sonnet: 'claude-sonnet-4-5-20250929',
+  haiku: 'claude-haiku-4-5-20251001',
+};
+
+export interface AIResponse {
+  content: string;
+  model: string;
+  usage: { input_tokens: number; output_tokens: number };
+}
+
+export async function callAI(
+  systemPrompt: string,
+  userPrompt: string,
+  tier: ModelTier = 'sonnet',
+  maxTokens: number = 2048
+): Promise<AIResponse> {
+  const model = MODELS[tier];
+
+  console.log(`  🤖 Calling ${tier} (${model})...`);
+
+  const response = await client.messages.create({
+    model,
+    max_tokens: maxTokens,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
+  });
+
+  const textBlock = response.content.find(b => b.type === 'text');
+  const content = textBlock ? textBlock.text : '';
+
+  console.log(`  ✅ Response received (${response.usage.input_tokens} in / ${response.usage.output_tokens} out)`);
+
+  return {
+    content,
+    model,
+    usage: {
+      input_tokens: response.usage.input_tokens,
+      output_tokens: response.usage.output_tokens,
+    },
+  };
+}
+
+// Parse JSON from AI response, handling markdown code blocks
+export function parseJSONResponse<T>(content: string): T {
+  // Strip markdown code blocks if present
+  let cleaned = content.trim();
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.slice(7);
+  } else if (cleaned.startsWith('```')) {
+    cleaned = cleaned.slice(3);
+  }
+  if (cleaned.endsWith('```')) {
+    cleaned = cleaned.slice(0, -3);
+  }
+  cleaned = cleaned.trim();
+
+  return JSON.parse(cleaned) as T;
+}
