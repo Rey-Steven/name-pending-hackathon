@@ -11,7 +11,7 @@ export interface AgentContexts {
 }
 
 export interface CompanyProfile {
-  id: number
+  id: string
   name: string
   website?: string
   logo_path?: string
@@ -22,7 +22,7 @@ export interface CompanyProfile {
   products_services?: string
   geographic_focus?: string
   agent_context_json: AgentContexts
-  setup_complete: number
+  setup_complete: boolean
 }
 
 export const useCompanyStore = defineStore('company', () => {
@@ -72,6 +72,20 @@ export const useCompanyStore = defineStore('company', () => {
     }
   }
 
+  async function rescrapeProfile() {
+    isLoading.value = true
+    error.value = null
+    try {
+      const res = await companyApi.rescrape()
+      profile.value = res.data
+    } catch (err: any) {
+      error.value = err.response?.data?.error || err.message || 'Re-analysis failed'
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   return {
     profile,
     setupComplete,
@@ -81,5 +95,6 @@ export const useCompanyStore = defineStore('company', () => {
     checkSetupStatus,
     fetchProfile,
     setupCompany,
+    rescrapeProfile,
   }
 })

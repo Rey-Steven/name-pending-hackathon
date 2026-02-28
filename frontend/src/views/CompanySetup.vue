@@ -4,8 +4,8 @@
 
       <!-- Header -->
       <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 text-white">
-        <h1 class="text-2xl font-bold">Welcome to AgentFlow</h1>
-        <p class="text-blue-100 mt-1">Let's set up your AI-powered company in minutes</p>
+        <h1 class="text-2xl font-bold">{{ isEditMode ? 'Company Settings' : 'Welcome to AgentFlow' }}</h1>
+        <p class="text-blue-100 mt-1">{{ isEditMode ? 'Update your company profile and AI team context' : 'Let\'s set up your AI-powered company in minutes' }}</p>
         <!-- Progress bar -->
         <div class="mt-4 flex gap-2">
           <div
@@ -265,17 +265,28 @@
         </div>
 
         <div class="mt-8 flex justify-between">
-          <button
-            @click="currentStep = 1"
-            class="px-4 py-2.5 text-gray-600 hover:text-gray-900 font-medium transition-colors"
-          >
-            ✏️ Edit
-          </button>
+          <div class="flex gap-3">
+            <button
+              @click="currentStep = 1"
+              class="px-4 py-2.5 text-gray-600 hover:text-gray-900 font-medium transition-colors"
+            >
+              ✏️ Edit
+            </button>
+            <button
+              v-if="isEditMode && companyStore.profile?.website"
+              @click="triggerRescrape"
+              :disabled="isRescraping"
+              class="px-4 py-2.5 text-blue-600 hover:text-blue-800 font-medium transition-colors disabled:opacity-50"
+              title="Re-fetch website and regenerate AI contexts"
+            >
+              {{ isRescraping ? '⏳ Re-analyzing...' : '🔄 Re-analyze AI' }}
+            </button>
+          </div>
           <button
             @click="goToDashboard"
             class="px-6 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
           >
-            Launch Dashboard 🚀
+            {{ isEditMode ? 'Back to Dashboard' : 'Launch Dashboard 🚀' }}
           </button>
         </div>
       </div>
@@ -285,7 +296,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCompanyStore } from '../stores/company'
 
@@ -296,12 +307,30 @@ const currentStep = ref(1)
 const showAgentContexts = ref(false)
 const setupError = ref<string | null>(null)
 const analysisProgress = ref(-1)
+const isEditMode = ref(false)
+const isRescraping = ref(false)
 
 const form = ref({
   name: '',
   website: '',
   industry: '',
   userText: '',
+})
+
+// Pre-fill form if profile already exists (edit mode)
+onMounted(async () => {
+  if (!companyStore.profile) {
+    await companyStore.fetchProfile()
+  }
+  const p = companyStore.profile
+  if (p) {
+    isEditMode.value = true
+    form.value.name = p.name
+    form.value.website = p.website || ''
+    form.value.industry = p.industry || ''
+    // Show the review step directly so they see current state
+    currentStep.value = 4
+  }
 })
 
 // File state
@@ -419,6 +448,17 @@ async function startAnalysis() {
   } catch (err: any) {
     clearInterval(stepTimer)
     setupError.value = companyStore.error || 'Unknown error occurred'
+  }
+}
+
+async function triggerRescrape() {
+  isRescraping.value = true
+  try {
+    await companyStore.rescrapeProfile()
+  } catch {
+    // error already set in store
+  } finally {
+    isRescraping.value = false
   }
 }
 

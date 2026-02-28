@@ -166,7 +166,7 @@ function formatTime(ts: string) {
   return new Date(ts).toLocaleTimeString()
 }
 
-async function startWorkflow(leadId: number) {
+async function startWorkflow(leadId: string) {
   store.setWorkflowRunning(leadId)
   try {
     await workflowApi.start(leadId)

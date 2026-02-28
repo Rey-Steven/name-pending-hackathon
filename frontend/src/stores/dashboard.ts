@@ -8,9 +8,9 @@ export interface AgentEvent {
   message: string
   reasoning?: string[]
   data?: Record<string, any>
-  taskId?: number
-  dealId?: number
-  leadId?: number
+  taskId?: string
+  dealId?: string
+  leadId?: string
   timestamp: string
 }
 
@@ -22,7 +22,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const tasks = ref<any[]>([])
   const auditLog = ref<any[]>([])
   const agentEvents = ref<AgentEvent[]>([])
-  const activeWorkflow = ref<number | null>(null)
+  const activeWorkflow = ref<string | null>(null)
   const isWorkflowRunning = ref(false)
   const eventSource = ref<EventSource | null>(null)
 
@@ -91,7 +91,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     }
   }
 
-  function setWorkflowRunning(leadId: number) {
+  function setWorkflowRunning(leadId: string) {
     activeWorkflow.value = leadId
     isWorkflowRunning.value = true
     agentEvents.value = [] // Clear previous events

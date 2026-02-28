@@ -119,7 +119,7 @@ function formatCurrency(amount: number) {
 }
 
 onMounted(async () => {
-  const id = parseInt(route.params.id as string)
+  const id = route.params.id as string
   const res = await dealsApi.getById(id)
   deal.value = res.data
 })

@@ -7,7 +7,7 @@ const api = axios.create({
 
 export const leadsApi = {
   getAll: () => api.get('/leads'),
-  getById: (id: number) => api.get(`/leads/${id}`),
+  getById: (id: string) => api.get(`/leads/${id}`),
   create: (data: {
     companyName: string
     contactName: string
@@ -20,7 +20,7 @@ export const leadsApi = {
 
 export const dealsApi = {
   getAll: () => api.get('/deals'),
-  getById: (id: number) => api.get(`/deals/${id}`),
+  getById: (id: string) => api.get(`/deals/${id}`),
 }
 
 export const tasksApi = {
@@ -34,7 +34,7 @@ export const dashboardApi = {
 }
 
 export const workflowApi = {
-  start: (leadId: number) => api.post('/workflow/start', { leadId }),
+  start: (leadId: string) => api.post('/workflow/start', { leadId }),
 }
 
 export const companyApi = {
