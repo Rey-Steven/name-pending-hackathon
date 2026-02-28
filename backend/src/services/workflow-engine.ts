@@ -236,7 +236,7 @@ export class WorkflowEngine {
       await DealDB.update(dealId, { status: 'in_pipeline', negotiation_round: roundNumber });
       await emailAgent.deliver({
         to: lead.contact_email!,
-        subject: analysis.data.replySubject,
+        subject: reply.subject,
         body: analysis.data.replyBody,
         dealId,
         recipientName: lead.contact_name,
@@ -285,7 +285,7 @@ export class WorkflowEngine {
 
       await emailAgent.deliver({
         to: lead.contact_email!,
-        subject: analysis.data.replySubject,
+        subject: reply.subject,
         body: analysis.data.replyBody,
         dealId,
         recipientName: lead.contact_name,
@@ -317,7 +317,7 @@ export class WorkflowEngine {
       await LeadDB.update(deal.lead_id, { status: 'converted' });
       await emailAgent.deliver({
         to: lead.contact_email!,
-        subject: analysis.data.replySubject,
+        subject: reply.subject,
         body: analysis.data.replyBody,
         dealId,
         recipientName: lead.contact_name,
@@ -350,7 +350,7 @@ export class WorkflowEngine {
 
     await emailAgent.deliver({
       to: lead.contact_email!,
-      subject: analysis.data.replySubject,
+      subject: reply.subject,
       body: analysis.data.replyBody,
       dealId,
       recipientName: lead.contact_name,

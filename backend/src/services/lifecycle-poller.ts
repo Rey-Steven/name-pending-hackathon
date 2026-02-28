@@ -1,4 +1,4 @@
-import { DealDB, LeadDB } from '../database/db';
+import { DealDB, LeadDB, EmailDB } from '../database/db';
 import { CompanyProfileDB } from '../database/db';
 import { EmailAgent } from '../agents/email-agent';
 
@@ -60,6 +60,12 @@ export async function pollStaleLeads(): Promise<void> {
         }
 
         const followUpCount = deal.follow_up_count ?? 0;
+
+        // Look up the last email in this deal's thread for proper Gmail threading
+        const dealEmails = await EmailDB.findByDeal(deal.id!);
+        const lastEmail = dealEmails.length > 0 ? dealEmails[dealEmails.length - 1] : undefined;
+        const threadWith = lastEmail?.message_id ? { messageId: lastEmail.message_id, subject: lastEmail.subject } : undefined;
+
         await emailAgent.sendEmail(deal.lead_id, 'follow_up', {
           dealId: deal.id,
           salesResult: {
@@ -68,6 +74,7 @@ export async function pollStaleLeads(): Promise<void> {
             followUpCount,
             daysSinceProposal: Math.floor(daysSince(deal.updated_at || deal.created_at || '')),
           },
+          threadWith,
         });
 
         const newCount = followUpCount + 1;

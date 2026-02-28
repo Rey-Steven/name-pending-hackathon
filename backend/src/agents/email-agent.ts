@@ -265,7 +265,7 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
   async sendEmail(
     leadId: string,
     emailType: 'cold_outreach' | 'proposal' | 'confirmation' | 'invoice' | 'follow_up' | 'satisfaction',
-    context: { dealId?: string; taskId?: string; salesResult?: any; invoiceData?: any; invoiceNumber?: string; invoiceId?: string }
+    context: { dealId?: string; taskId?: string; salesResult?: any; invoiceData?: any; invoiceNumber?: string; invoiceId?: string; threadWith?: { messageId: string; subject: string } }
   ): Promise<EmailResult> {
     this.mode = 'compose';
 
@@ -280,10 +280,23 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
     const recipientEmail = lead.contact_email || result.data.recipientEmail;
     const recipientName = result.data.recipientName || lead.contact_name;
 
+    // Use thread subject + headers when threading with a previous email
+    let subject = result.data.subject;
+    let inReplyTo: string | undefined;
+    let references: string | undefined;
+    if (context.threadWith?.messageId) {
+      const baseSubject = context.threadWith.subject.replace(/^(Re|RE|Απ|ΑΠ|Fwd|FWD|Πρ):\s*/g, '').trim();
+      subject = `Re: ${baseSubject}`;
+      inReplyTo = context.threadWith.messageId;
+      references = context.threadWith.messageId;
+    }
+
     const sendResult = await sendRealEmail({
       to: recipientEmail,
-      subject: result.data.subject,
+      subject,
       body: result.data.body,
+      inReplyTo,
+      references,
     });
 
     await EmailDB.create({
@@ -292,7 +305,7 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
       invoice_id: context.invoiceId,
       recipient_email: recipientEmail,
       recipient_name: recipientName,
-      subject: result.data.subject,
+      subject,
       body: result.data.body,
       email_type: emailType,
       direction: 'outbound',
@@ -369,9 +382,13 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
 
     const recipientEmail = input.customerEmail || input.originalEmail.recipient_email;
 
+    // Preserve the original subject for Gmail threading (strip prefixes then re-add Re:)
+    const baseSubject = input.originalEmail.subject.replace(/^(Re|RE|Απ|ΑΠ|Fwd|FWD|Πρ):\s*/g, '').trim();
+    const threadSubject = `Re: ${baseSubject}`;
+
     const sendResult = await sendRealEmail({
       to: recipientEmail,
-      subject: result.data.subject,
+      subject: threadSubject,
       body: result.data.body,
       inReplyTo: input.originalEmail.message_id,
       references: input.originalEmail.message_id,
@@ -381,7 +398,7 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
       deal_id: input.dealId,
       recipient_email: recipientEmail,
       recipient_name: result.data.recipientName || input.customerName || '',
-      subject: result.data.subject,
+      subject: threadSubject,
       body: result.data.body,
       email_type: 'follow_up',
       direction: 'outbound',

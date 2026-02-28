@@ -64,8 +64,10 @@ export async function sendRealEmail(params: {
 
     const info = await transporter.sendMail(mailOptions);
 
-    console.log(`  📧 ✅ Email SENT to ${params.to} (ID: ${info.messageId})`);
-    return { sent: true, messageId: info.messageId };
+    // Strip angle brackets for consistent storage (nodemailer returns <id@host>)
+    const messageId = (info.messageId || '').replace(/^<|>$/g, '');
+    console.log(`  📧 ✅ Email SENT to ${params.to} (ID: ${messageId})`);
+    return { sent: true, messageId };
   } catch (error: any) {
     console.error(`  📧 ❌ Email FAILED to ${params.to}: ${error.message}`);
     return { sent: false, error: error.message };
@@ -111,10 +113,11 @@ async function parseMessage(message: any): Promise<InboxEmail | null> {
     const parsed: any = await simpleParser(message.source);
 
     const fromAddr = parsed.from?.value?.[0];
-    const inReplyTo = parsed.inReplyTo || '';
+    const stripBrackets = (s: string) => s.replace(/^<|>$/g, '');
+    const inReplyTo = stripBrackets(parsed.inReplyTo || '');
     const references = Array.isArray(parsed.references)
-      ? parsed.references.join(' ')
-      : (parsed.references || '');
+      ? parsed.references.map((r: string) => stripBrackets(r)).join(' ')
+      : stripBrackets(parsed.references || '');
 
     const toField = parsed.to;
     let toStr = '';
@@ -128,7 +131,7 @@ async function parseMessage(message: any): Promise<InboxEmail | null> {
 
     return {
       uid: message.uid,
-      messageId: parsed.messageId || '',
+      messageId: stripBrackets(parsed.messageId || ''),
       from: fromAddr?.address || '',
       fromName: fromAddr?.name || fromAddr?.address || '',
       to: toStr,
