@@ -46,9 +46,10 @@ router.post('/:id/check-reply', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Deal not found' });
     }
 
-    if (!['proposal_sent', 'negotiating'].includes(deal.status || '')) {
+    const replyStatuses = ['lead_contacted', 'in_pipeline', 'offer_sent', 'proposal_sent', 'negotiating'];
+    if (!replyStatuses.includes(deal.status || '')) {
       return res.status(400).json({
-        error: `Deal is in '${deal.status}' status. Only 'proposal_sent' or 'negotiating' deals can check for replies.`,
+        error: `Deal is in '${deal.status}' status. Only deals in ${replyStatuses.join(', ')} can check for replies.`,
       });
     }
 

@@ -72,7 +72,7 @@ async function pollForReplies() {
     const { getFirestore } = await import('./database/firebase');
     const snap = await getFirestore()
       .collection('deals')
-      .where('status', 'in', ['proposal_sent', 'negotiating'])
+      .where('status', 'in', ['lead_contacted', 'in_pipeline', 'offer_sent', 'proposal_sent', 'negotiating'])
       .get();
 
     const activeDeals = snap.docs.map(d => ({ id: d.id }));
