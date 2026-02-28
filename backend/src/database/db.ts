@@ -104,7 +104,7 @@ export interface Email {
   recipient_name: string;
   subject: string;
   body: string;
-  email_type?: 'proposal' | 'invoice' | 'confirmation' | 'follow_up' | 'satisfaction';
+  email_type?: 'proposal' | 'invoice' | 'confirmation' | 'follow_up' | 'satisfaction' | 'cold_outreach';
   direction?: 'outbound' | 'inbound';
   message_id?: string;
   sender_email?: string;

@@ -19,10 +19,11 @@ When composing an email, you must:
 4. Be professional and concise
 
 Email types:
+- "cold_outreach": First contact with a new lead — introduce company, NO pricing yet
 - "proposal": Business proposal with pricing (invite customer to reply to discuss/accept)
 - "confirmation": Deal closure confirmation
 - "invoice": Invoice delivery email
-- "follow_up": Stale proposal follow-up reminder (up to 3 attempts)
+- "follow_up": Stale offer follow-up reminder (up to 3 attempts)
 - "satisfaction": Post-close satisfaction check-in (sent 3 days after deal completes)
 
 IMPORTANT: The recipientEmail MUST be the exact email from the RECIPIENT section below. Do not make up emails.
@@ -40,7 +41,7 @@ ALWAYS respond with valid JSON in this exact format:
     "body": "full email body",
     "recipientEmail": "MUST use exact email from recipient info",
     "recipientName": "name",
-    "emailType": "proposal" | "confirmation" | "invoice" | "follow_up" | "satisfaction"
+    "emailType": "cold_outreach" | "proposal" | "confirmation" | "invoice" | "follow_up" | "satisfaction"
   }
 }`;
   }
@@ -49,7 +50,20 @@ ALWAYS respond with valid JSON in this exact format:
     const { lead, emailType, salesResult, invoiceData, invoiceNumber } = input;
 
     let context = '';
-    if (emailType === 'proposal' && salesResult) {
+    if (emailType === 'cold_outreach') {
+      context = `
+COLD OUTREACH — FIRST CONTACT:
+- This is our VERY FIRST email to this lead. We have NOT discussed pricing yet.
+- Lead's stated interest: ${lead.product_interest || 'general inquiry'}
+- Lead's company: ${lead.company_name}
+
+Compose a warm, concise cold outreach email that:
+1. Briefly introduces our company and what we offer
+2. Explains specifically how we could help their business (tie to their product interest)
+3. Asks if they would be open to learning more or discussing their needs
+4. Ends with a clear, low-pressure invitation to reply
+DO NOT include any pricing. This is a first-touch relationship-building email.`;
+    } else if (emailType === 'proposal' && salesResult) {
       context = `
 PROPOSAL TO SEND:
 - Product: ${salesResult.productName}
@@ -117,7 +131,7 @@ Write the email in Greek language. Use the EXACT email address "${lead.contact_e
 
   async sendEmail(
     leadId: string,
-    emailType: 'proposal' | 'confirmation' | 'invoice' | 'follow_up' | 'satisfaction',
+    emailType: 'cold_outreach' | 'proposal' | 'confirmation' | 'invoice' | 'follow_up' | 'satisfaction',
     context: { dealId?: string; taskId?: string; salesResult?: any; invoiceData?: any; invoiceNumber?: string; invoiceId?: string }
   ): Promise<EmailResult> {
     const lead = await LeadDB.findById(leadId);

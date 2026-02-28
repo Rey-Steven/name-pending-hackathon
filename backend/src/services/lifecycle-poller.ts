@@ -39,7 +39,8 @@ export async function pollStaleLeads(): Promise<void> {
   pollingStale = true;
 
   try {
-    const deals = await DealDB.findByStatus(['proposal_sent']);
+    // Include both new ('offer_sent') and legacy ('proposal_sent') statuses
+    const deals = await DealDB.findByStatus(['offer_sent', 'proposal_sent']);
     const stale = deals.filter(d => {
       const updatedAt = d.updated_at || d.created_at || '';
       return updatedAt && daysSince(updatedAt) >= 7 && (d.follow_up_count ?? 0) < 3;
@@ -97,7 +98,8 @@ export async function pollLostDeals(): Promise<void> {
   pollingLost = true;
 
   try {
-    const deals = await DealDB.findByStatus(['failed', 'no_response']);
+    // Include both new ('closed_lost') and legacy ('failed', 'no_response') statuses
+    const deals = await DealDB.findByStatus(['closed_lost', 'failed', 'no_response']);
     const toReopen = deals.filter(d => {
       const updatedAt = d.updated_at || d.created_at || '';
       return updatedAt && daysSince(updatedAt) >= 60;
@@ -158,7 +160,8 @@ export async function pollSatisfactionEmails(): Promise<void> {
   pollingSatisfaction = true;
 
   try {
-    const deals = await DealDB.findByStatus(['completed']);
+    // Include both new ('closed_won') and legacy ('completed') statuses
+    const deals = await DealDB.findByStatus(['closed_won', 'completed']);
     const toNotify = deals.filter(d => {
       if (d.satisfaction_sent) return false;
       const updatedAt = d.updated_at || d.created_at || '';

@@ -15,7 +15,23 @@ export type TaskType =
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type LeadScore = 'A' | 'B' | 'C';
 export type LeadStatus = 'new' | 'qualified' | 'contacted' | 'converted' | 'rejected';
-export type DealStatus = 'pending' | 'proposal_sent' | 'negotiating' | 'legal_review' | 'invoicing' | 'completed' | 'failed' | 'no_response' | 'reopened';
+// New pipeline statuses (active flow)
+export type DealStatus =
+  | 'lead_contacted'   // cold outreach sent, awaiting first reply
+  | 'in_pipeline'      // lead showed interest, conversation ongoing
+  | 'offer_sent'       // formal offer with pricing sent
+  | 'closed_won'       // offer accepted → invoice pipeline runs
+  | 'closed_lost'      // lead declined
+  // Legacy statuses (kept for backward compatibility)
+  | 'pending'
+  | 'proposal_sent'
+  | 'negotiating'
+  | 'legal_review'
+  | 'invoicing'
+  | 'completed'
+  | 'failed'
+  | 'no_response'
+  | 'reopened';
 export type RiskLevel = 'low' | 'medium' | 'high';
 
 // Agent response from Claude
@@ -92,7 +108,28 @@ export interface EmailResult extends AgentResponse {
     body: string;
     recipientEmail: string;
     recipientName: string;
-    emailType: 'proposal' | 'invoice' | 'confirmation' | 'follow_up' | 'satisfaction';
+    emailType: 'proposal' | 'invoice' | 'confirmation' | 'follow_up' | 'satisfaction' | 'cold_outreach';
+  };
+}
+
+// Reply analysis result (Sales Agent handling inbound customer replies)
+export interface ReplyAnalysisResult extends AgentResponse {
+  data: {
+    action: 'engaged' | 'wants_offer' | 'accepted' | 'counter' | 'new_offer' | 'declined';
+    customerSentiment: 'positive' | 'neutral' | 'negative';
+    customerIntent: string;
+    replySubject: string;
+    replyBody: string;
+    // Populated when action is wants_offer / counter / new_offer:
+    offerProductName?: string;
+    offerQuantity?: number;
+    offerUnitPrice?: number;
+    offerSubtotal?: number;
+    offerFpaRate?: number;
+    offerFpaAmount?: number;
+    offerTotalAmount?: number;
+    offerSummary?: string;
+    failureReason?: string;
   };
 }
 

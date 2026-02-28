@@ -1,5 +1,5 @@
 import { BaseAgent } from './base-agent';
-import { SalesResult, NegotiationResult, CompanyProfileContext } from '../types';
+import { SalesResult, ReplyAnalysisResult, CompanyProfileContext } from '../types';
 import { LeadDB, DealDB, Lead } from '../database/db';
 import { TaskQueue } from '../services/task-queue';
 import { callAI, parseJSONResponse } from '../services/ai-service';
@@ -11,55 +11,47 @@ export class SalesAgent extends BaseAgent {
     super('sales', 'sonnet', companyProfile);
   }
 
+  // ─── System prompt for initial deal processing ───────────────
+
   getSystemPrompt(): string {
     const companyHeader = this.buildCompanyContextHeader('sales');
-    return `${companyHeader}You are a Sales AI agent. Your job is to qualify leads and close deals.
+    return `${companyHeader}You are a Sales AI agent. ALL incoming leads are contacted — your job is to engage every lead without exception.
 
-When given a qualified lead, you must:
-1. Evaluate using BANT criteria (Budget, Authority, Need, Timeline)
-2. Determine if the deal should be closed, nurtured, or rejected
-3. If closing, calculate pricing appropriate to the company's product/service
-4. Generate a brief proposal summary
+Use BANT analysis only to:
+1. Inform pricing tier (A-score leads → premium, B → standard, C → entry-level)
+2. Tailor the cold outreach angle and hook
 
 Pricing guidelines:
-- Base unit price: calculate based on the company's products/services and the lead's company size
+- Calculate pricing based on the company's products/services and the lead's profile
 - Volume discounts: 5% for orders > €10K, 10% for > €50K
-- Include applicable VAT/tax
+- Include FPA at 24%
 - Payment terms: Net 30 days standard
-
-Important qualification rules:
-- Never set qualification = "reject" solely because of email domain quality (free/personal domain, gmail, or test-looking inbox).
-- Approved test emails must be treated as valid for demo/testing and should not reduce qualification.
-- Reject only for clear business disqualification (no fit, no need, no budget, or explicit refusal). If uncertain, prefer "nurture".
-- For leadScore A/B with clear industry fit and decision-maker contact, default to qualification = "close" even if budget/timeline are not explicitly confirmed.
-- Missing website, missing timeline, or unverified budget are NOT sufficient reasons for "nurture" when the lead otherwise matches ICP.
-- In those cases, create a reasonable initial offer and use proposalSummary to request a discovery call for final scope/timeline confirmation.
 
 ALWAYS respond with valid JSON in this exact format:
 {
   "reasoning": ["step 1", "step 2", "..."],
-  "decision": "Close deal / Nurture / Reject - brief reason",
+  "decision": "Contact - brief reason",
   "data": {
-    "qualification": "close" | "nurture" | "reject",
-    "budget": true/false,
-    "authority": true/false,
-    "need": true/false,
-    "timeline": true/false,
-    "productName": "the product/service",
+    "qualification": "close",
+    "budget": true,
+    "authority": true,
+    "need": true,
+    "timeline": true,
+    "productName": "the product/service to offer",
     "quantity": 1,
     "unitPrice": 0,
     "subtotal": 0,
     "fpaRate": 0.24,
     "fpaAmount": 0,
     "totalAmount": 0,
-    "proposalSummary": "brief proposal text"
+    "proposalSummary": "cold outreach angle — what hook to use for this specific lead"
   }
 }`;
   }
 
   buildUserPrompt(input: { lead: Lead; marketingResult: any }): string {
     const { lead, marketingResult } = input;
-    return `Evaluate this qualified lead and decide on deal closure:
+    return `A new lead has been created. Plan the cold outreach and estimate initial pricing:
 
 LEAD INFORMATION:
 - Company: ${lead.company_name}
@@ -74,130 +66,141 @@ MARKETING ANALYSIS:
 - Lead Score: ${marketingResult.leadScore}
 - Recommended Approach: ${marketingResult.recommendedApproach}
 
-Evaluate BANT criteria, decide to close/nurture/reject, and calculate pricing if closing.`;
+Set "qualification" to "close" — we always contact this lead. Use BANT to inform pricing and outreach strategy.`;
   }
 
-  async processDeal(leadId: string, marketingResult: any): Promise<{ salesResult: SalesResult; dealId?: string }> {
+  // ─── Phase 1: Create deal + queue cold outreach ───────────────
+
+  async processDeal(leadId: string, marketingResult: any): Promise<{ salesResult: SalesResult; dealId: string }> {
     const lead = await LeadDB.findById(leadId);
     if (!lead) throw new Error(`Lead ${leadId} not found`);
 
     const result = await this.execute<SalesResult>({ lead, marketingResult }, { leadId });
-    const hasStrongFitSignals =
-      result.data.qualification === 'nurture' &&
-      ['A', 'B'].includes(marketingResult?.leadScore || '') &&
-      Boolean(lead.contact_email);
 
-    if (hasStrongFitSignals) {
-      result.data.qualification = 'close';
-      result.decision = `Close - auto-upgraded from nurture for strong A/B fit lead to continue proposal workflow. Original AI decision: ${result.decision}`;
-    }
+    // Always force qualification to close — BANT is informational only
+    result.data.qualification = 'close';
 
-    if (result.data.qualification === 'close') {
-      const dealId = await DealDB.create({
-        lead_id: leadId,
-        deal_value: result.data.subtotal,
-        product_name: result.data.productName,
-        quantity: result.data.quantity,
-        subtotal: result.data.subtotal,
-        fpa_rate: result.data.fpaRate,
-        fpa_amount: result.data.fpaAmount,
-        total_amount: result.data.totalAmount,
-        qualification_result: JSON.stringify({
-          budget: result.data.budget,
-          authority: result.data.authority,
-          need: result.data.need,
-          timeline: result.data.timeline,
-        }),
-        sales_notes: result.data.proposalSummary,
-        negotiation_round: 0,
-        status: 'proposal_sent',
-      });
+    const dealId = await DealDB.create({
+      lead_id: leadId,
+      deal_value: result.data.subtotal,
+      product_name: result.data.productName,
+      quantity: result.data.quantity,
+      subtotal: result.data.subtotal,
+      fpa_rate: result.data.fpaRate,
+      fpa_amount: result.data.fpaAmount,
+      total_amount: result.data.totalAmount,
+      qualification_result: JSON.stringify({
+        budget: result.data.budget,
+        authority: result.data.authority,
+        need: result.data.need,
+        timeline: result.data.timeline,
+      }),
+      sales_notes: result.data.proposalSummary,
+      negotiation_round: 0,
+      status: 'lead_contacted',
+    });
 
-      await LeadDB.update(leadId, { status: 'contacted' });
+    await LeadDB.update(leadId, { status: 'contacted' });
 
-      await TaskQueue.createTask({
-        sourceAgent: 'sales',
-        targetAgent: 'email',
-        taskType: 'send_proposal',
-        title: `Send proposal: ${lead.company_name}`,
-        description: `Proposal for €${result.data.totalAmount.toFixed(2)} - awaiting customer reply`,
-        inputData: { dealId, leadId, salesResult: result.data, emailType: 'proposal' },
-        dealId,
-        leadId,
-      });
+    // Queue cold outreach email — first contact, no pricing
+    await TaskQueue.createTask({
+      sourceAgent: 'sales',
+      targetAgent: 'email',
+      taskType: 'send_proposal',
+      title: `Cold outreach: ${lead.company_name}`,
+      description: `First contact — ${result.data.proposalSummary}`,
+      inputData: { dealId, leadId, salesResult: result.data, emailType: 'cold_outreach' },
+      dealId,
+      leadId,
+    });
 
-      return { salesResult: result, dealId };
-    }
-
-    await LeadDB.update(leadId, { status: result.data.qualification === 'nurture' ? 'contacted' : 'rejected' });
-    return { salesResult: result };
+    return { salesResult: result, dealId };
   }
 
-  async negotiateReply(params: {
+  // ─── Phase 2: Analyze inbound customer reply ──────────────────
+
+  async analyzeReply(params: {
     dealId: string;
     leadId: string;
+    dealStatus: string;
     customerReply: string;
     currentDeal: any;
     roundNumber: number;
     maxRounds: number;
-  }): Promise<NegotiationResult> {
-    const { dealId, leadId, customerReply, currentDeal, roundNumber, maxRounds } = params;
+  }): Promise<ReplyAnalysisResult> {
+    const { dealId, leadId, dealStatus, customerReply, currentDeal, roundNumber, maxRounds } = params;
     const lead = await LeadDB.findById(leadId);
     if (!lead) throw new Error(`Lead ${leadId} not found`);
 
     const isLastRound = roundNumber >= maxRounds;
 
-    const systemPrompt = `You are a Sales Negotiation AI agent for a Greek B2B company. A customer has replied to your proposal and you must analyze their response and decide the next action.
+    const systemPrompt = `You are a Sales AI agent handling email conversations with leads for a Greek B2B company.
 
-You are in negotiation round ${roundNumber} of ${maxRounds} maximum rounds.
+Analyze the customer's reply and decide the next action based on the CURRENT PIPELINE STAGE.
 
-RULES:
-- If the customer ACCEPTS the offer (positive response, agrees to terms, wants to proceed): action = "accept"
-- If the customer DECLINES or has objections but negotiation is possible: action = "counter_offer"
-  - You may adjust price by up to 15% total from original
-  - You may adjust payment terms (Net 30 → Net 45/60)
-  - You may add value (free shipping, extended warranty, volume bonus)
-  - Always maintain minimum 10% margin
-- If this is the LAST round (${isLastRound ? 'YES - THIS IS THE LAST ROUND' : 'no'}), or customer firmly refuses: action = "give_up"
-  - Provide a detailed failureReason analyzing WHY the deal did not go through
+=== CURRENT STAGE: "${dealStatus}" ===
 
-IMPORTANT: Write the responseBody in Greek language. This is the email that will be sent to the customer.
-${isLastRound ? '\nIMPORTANT: This is the FINAL round. If the customer has not accepted, you MUST give_up and provide a failureReason.' : ''}
+Stage definitions and valid actions:
+- "lead_contacted": We sent a cold outreach. This is their first reply.
+  → "engaged": Shows interest, not ready for an offer
+  → "wants_offer": Asks for pricing/quote immediately
+  → "declined": Not interested
+- "in_pipeline": Active conversation, exploring needs.
+  → "engaged": Continues conversation, not ready for offer
+  → "wants_offer": Asks for pricing/quote
+  → "declined": Lost interest
+- "offer_sent": We sent a formal offer. They are responding.
+  → "accepted": Agrees to terms, wants to proceed
+  → "counter": Wants to negotiate (price, terms, scope)
+  → "new_offer": Declines this offer but wants a different one
+  → "declined": Firmly declines${isLastRound ? '\n\n⚠️ FINAL ROUND: Must use "accepted" or "declined".' : ''}
+
+=== RULES ===
+- Write ALL emails (replyBody) in Greek language
+- When action is "wants_offer", "counter", or "new_offer": provide FULL pricing (offerProductName, offerQuantity, offerUnitPrice, offerSubtotal, offerFpaRate, offerFpaAmount, offerTotalAmount) and embed the complete offer inside replyBody
+- For "counter": adjust price by up to 15% from original, maintain 10% minimum margin
+- For "engaged": ask questions to understand their needs better — warm and conversational
+- For "accepted": send a warm deal confirmation
+- For "declined": send a respectful closing email, leave the door open for future contact
 
 ALWAYS respond with valid JSON:
 {
-  "reasoning": ["step 1 - analyze customer reply", "step 2 - evaluate objection", "step 3 - decide action", "..."],
-  "decision": "Brief description of negotiation decision",
+  "reasoning": ["step 1", "step 2", "step 3"],
+  "decision": "Brief description",
   "data": {
-    "action": "accept" | "counter_offer" | "give_up",
+    "action": "engaged" | "wants_offer" | "accepted" | "counter" | "new_offer" | "declined",
     "customerSentiment": "positive" | "neutral" | "negative",
-    "objectionSummary": "What the customer objects to",
-    "revisedSubtotal": null or new number,
-    "revisedFpaAmount": null or new number,
-    "revisedTotal": null or new number,
-    "revisedTerms": null or "new payment terms",
-    "responseSubject": "Re: original subject in Greek",
-    "responseBody": "Full email reply in Greek",
-    "failureReason": null or "detailed analysis of why deal failed"
+    "customerIntent": "one sentence summary",
+    "replySubject": "email subject",
+    "replyBody": "full email in Greek",
+    "offerProductName": null,
+    "offerQuantity": null,
+    "offerUnitPrice": null,
+    "offerSubtotal": null,
+    "offerFpaRate": 0.24,
+    "offerFpaAmount": null,
+    "offerTotalAmount": null,
+    "offerSummary": null,
+    "failureReason": null
   }
 }`;
 
-    const userPrompt = `CURRENT DEAL:
+    const userPrompt = `DEAL CONTEXT:
 - Company: ${lead.company_name}
 - Contact: ${lead.contact_name} (${lead.contact_email})
-- Product: ${currentDeal.product_name}
-- Current Price: €${currentDeal.subtotal} + FPA (24%) = €${currentDeal.total_amount}
-- Payment Terms: Net 30 days
-- Negotiation Round: ${roundNumber} of ${maxRounds}
+- Product/Service: ${currentDeal.product_name || lead.product_interest || 'General inquiry'}
+- Current Pricing (if offer was already sent): €${currentDeal.subtotal} + FPA 24% = €${currentDeal.total_amount}
+- Round: ${roundNumber} of ${maxRounds}
+- Our Previous Outreach Angle: ${currentDeal.sales_notes || 'General cold outreach'}
 
 CUSTOMER'S REPLY:
 "${customerReply}"
 
-Analyze the customer's reply and decide your next move. Write your response email in Greek.`;
+Analyze this reply in stage "${dealStatus}" and decide the next action.`;
 
     console.log(`\n${'='.repeat(50)}`);
-    console.log(`  🤝 SALES NEGOTIATION - Round ${roundNumber}/${maxRounds}`);
-    console.log(`  📋 Deal #${dealId} - ${lead.company_name}`);
+    console.log(`  📥 REPLY ANALYSIS — Stage: ${dealStatus} (round ${roundNumber}/${maxRounds})`);
+    console.log(`  📋 Deal #${dealId} — ${lead.company_name}`);
     console.log(`${'='.repeat(50)}`);
 
     broadcastEvent({
@@ -205,30 +208,28 @@ Analyze the customer's reply and decide your next move. Write your response emai
       agent: 'sales',
       dealId,
       leadId,
-      message: `Sales negotiation round ${roundNumber} - analyzing customer reply`,
+      message: `Analyzing customer reply — stage: ${dealStatus}`,
       timestamp: new Date().toISOString(),
     });
 
     try {
       const response = await callAI(systemPrompt, userPrompt, 'sonnet');
-      const result = parseJSONResponse<NegotiationResult>(response.content);
+      const result = parseJSONResponse<ReplyAnalysisResult>(response.content);
 
       if (result.reasoning) {
-        console.log(`\n  🧠 Negotiation reasoning:`);
-        result.reasoning.forEach((step, i) => {
-          console.log(`     ${i + 1}. ${step}`);
-        });
+        console.log('\n  🧠 Analysis:');
+        result.reasoning.forEach((step, i) => console.log(`     ${i + 1}. ${step}`));
       }
       console.log(`  📋 Decision: ${result.decision}`);
       console.log(`  🎯 Action: ${result.data.action}`);
       console.log(`  💭 Sentiment: ${result.data.customerSentiment}`);
-      console.log(`  📝 Objection: ${result.data.objectionSummary}`);
+      console.log(`  📝 Intent: ${result.data.customerIntent}`);
 
-      if (result.data.action === 'counter_offer' && result.data.revisedTotal) {
-        console.log(`  💰 Revised price: €${result.data.revisedTotal}`);
+      if (['wants_offer', 'counter', 'new_offer'].includes(result.data.action) && result.data.offerTotalAmount) {
+        console.log(`  💰 Offer total: €${result.data.offerTotalAmount}`);
       }
-      if (result.data.action === 'give_up' && result.data.failureReason) {
-        console.log(`  ❌ Why deal failed: ${result.data.failureReason}`);
+      if (result.data.action === 'declined' && result.data.failureReason) {
+        console.log(`  ❌ Reason: ${result.data.failureReason}`);
       }
 
       broadcastEvent({
@@ -236,31 +237,30 @@ Analyze the customer's reply and decide your next move. Write your response emai
         agent: 'sales',
         dealId,
         leadId,
-        message: `Negotiation round ${roundNumber}: ${result.data.action} - ${result.decision}`,
+        message: `Reply analyzed: ${result.data.action} — ${result.decision}`,
         reasoning: result.reasoning,
         data: result.data,
         timestamp: new Date().toISOString(),
       });
 
-      AuditLog.log('sales', 'negotiation_round', 'deal', dealId, {
+      AuditLog.log('sales', 'reply_analyzed', 'deal', dealId, {
+        stage: dealStatus,
         round: roundNumber,
         action: result.data.action,
         sentiment: result.data.customerSentiment,
-        objection: result.data.objectionSummary,
-        revisedTotal: result.data.revisedTotal,
-        failureReason: result.data.failureReason,
+        intent: result.data.customerIntent,
       });
 
       return result;
     } catch (error: any) {
-      console.error(`  ❌ Negotiation failed: ${error.message}`);
+      console.error(`  ❌ Reply analysis failed: ${error.message}`);
 
       broadcastEvent({
         type: 'agent_failed',
         agent: 'sales',
         dealId,
         leadId,
-        message: `Negotiation failed: ${error.message}`,
+        message: `Reply analysis failed: ${error.message}`,
         timestamp: new Date().toISOString(),
       });
 
