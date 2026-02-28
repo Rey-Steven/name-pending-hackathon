@@ -1,6 +1,7 @@
 import { BaseAgent } from './base-agent';
 import { EmailResult } from '../types';
 import { LeadDB, EmailDB } from '../database/db';
+import { sendRealEmail } from '../services/email-transport';
 
 export class EmailService extends BaseAgent {
   constructor() {
@@ -27,6 +28,8 @@ Greek business email conventions:
 - Include company name and contact details
 - Reference invoice numbers when applicable
 
+IMPORTANT: The recipientEmail MUST be the exact email from the RECIPIENT section below. Do not make up emails.
+
 ALWAYS respond with valid JSON in this exact format:
 {
   "reasoning": ["step 1", "step 2", "..."],
@@ -34,7 +37,7 @@ ALWAYS respond with valid JSON in this exact format:
   "data": {
     "subject": "email subject line in Greek",
     "body": "full email body in Greek",
-    "recipientEmail": "email@example.com",
+    "recipientEmail": "MUST use exact email from recipient info",
     "recipientName": "name",
     "emailType": "confirmation" | "invoice" | "follow_up"
   }
@@ -72,12 +75,12 @@ Compose a professional follow-up email.`;
 RECIPIENT:
 - Company: ${lead.company_name}
 - Contact: ${lead.contact_name}
-- Email: ${lead.contact_email || 'customer@example.gr'}
+- Email: ${lead.contact_email}
 
 TYPE: ${emailType}
 ${context}
 
-Write the email in Greek language.`;
+Write the email in Greek language. Use the EXACT email address "${lead.contact_email}" as the recipientEmail.`;
   }
 
   async sendEmail(
@@ -94,23 +97,38 @@ Write the email in Greek language.`;
       { dealId: context.dealId, leadId }
     );
 
+    // Use the lead's actual email, not whatever the AI returns
+    const recipientEmail = lead.contact_email || result.data.recipientEmail;
+    const recipientName = result.data.recipientName || lead.contact_name;
+
+    // Send real email via Gmail SMTP
+    const sendResult = await sendRealEmail({
+      to: recipientEmail,
+      subject: result.data.subject,
+      body: result.data.body,
+    });
+
     // Store email in database
-    const emailId = EmailDB.create({
+    EmailDB.create({
       task_id: undefined,
       deal_id: context.dealId,
       invoice_id: context.invoiceId,
-      recipient_email: result.data.recipientEmail || lead.contact_email || 'customer@example.gr',
-      recipient_name: result.data.recipientName || lead.contact_name,
+      recipient_email: recipientEmail,
+      recipient_name: recipientName,
       subject: result.data.subject,
       body: result.data.body,
       email_type: emailType,
-      status: 'sent', // For demo, mark as sent immediately
+      status: sendResult.sent ? 'sent' : 'failed',
+      error_message: sendResult.error,
     });
 
-    console.log(`\n  📧 EMAIL SENT:`);
-    console.log(`     To: ${result.data.recipientEmail || lead.contact_email}`);
+    console.log(`\n  📧 EMAIL ${sendResult.sent ? '✅ DELIVERED' : '⚠️ LOGGED'}:`);
+    console.log(`     To: ${recipientEmail}`);
     console.log(`     Subject: ${result.data.subject}`);
     console.log(`     Body preview: ${result.data.body.slice(0, 100)}...`);
+    if (sendResult.messageId) {
+      console.log(`     Message ID: ${sendResult.messageId}`);
+    }
 
     return result;
   }

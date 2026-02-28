@@ -4,6 +4,7 @@ dotenv.config({ path: '../.env' });
 import express from 'express';
 import cors from 'cors';
 import { initializeDatabase } from './database/db';
+import { initEmailTransport } from './services/email-transport';
 import leadsRoutes from './routes/leads.routes';
 import dealsRoutes from './routes/deals.routes';
 import tasksRoutes from './routes/tasks.routes';
@@ -18,6 +19,9 @@ app.use(express.json());
 
 // Initialize database
 initializeDatabase();
+
+// Initialize email transport
+initEmailTransport();
 
 // Routes
 app.use('/api/leads', leadsRoutes);
