@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS deals (
   qualification_result TEXT,
   sales_notes TEXT,
   -- Status
-  status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'legal_review', 'invoicing', 'completed', 'failed')),
+  status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'proposal_sent', 'negotiating', 'legal_review', 'invoicing', 'completed', 'failed')),
+  negotiation_round INTEGER DEFAULT 0,
   closed_at TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
@@ -110,7 +111,7 @@ CREATE TABLE IF NOT EXISTS emails (
   recipient_name TEXT NOT NULL,
   subject TEXT NOT NULL,
   body TEXT NOT NULL,
-  email_type TEXT CHECK(email_type IN ('proposal', 'invoice', 'confirmation', 'follow_up')),
+  email_type TEXT CHECK(email_type IN ('proposal', 'counter_offer', 'invoice', 'confirmation', 'follow_up', 'closing')),
   -- Status
   status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'sent', 'failed')),
   sent_at TEXT,

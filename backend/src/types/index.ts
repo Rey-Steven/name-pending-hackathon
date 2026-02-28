@@ -15,7 +15,7 @@ export type TaskType =
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type LeadScore = 'A' | 'B' | 'C';
 export type LeadStatus = 'new' | 'qualified' | 'contacted' | 'converted' | 'rejected';
-export type DealStatus = 'pending' | 'legal_review' | 'invoicing' | 'completed' | 'failed';
+export type DealStatus = 'pending' | 'proposal_sent' | 'negotiating' | 'legal_review' | 'invoicing' | 'completed' | 'failed';
 export type RiskLevel = 'low' | 'medium' | 'high';
 
 // Agent response from Claude
@@ -107,6 +107,22 @@ export interface SSEEvent {
   reasoning?: string[];
   data?: Record<string, any>;
   timestamp: string;
+}
+
+// Negotiation Agent output (Sales Agent in negotiation mode)
+export interface NegotiationResult extends AgentResponse {
+  data: {
+    action: 'accept' | 'counter_offer' | 'give_up';
+    customerSentiment: 'positive' | 'neutral' | 'negative';
+    objectionSummary: string;
+    revisedSubtotal?: number;
+    revisedFpaAmount?: number;
+    revisedTotal?: number;
+    revisedTerms?: string;
+    responseSubject: string;
+    responseBody: string;
+    failureReason?: string;
+  };
 }
 
 // Company profile context passed to agents

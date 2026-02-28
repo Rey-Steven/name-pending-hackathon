@@ -11,6 +11,7 @@ import dealsRoutes from './routes/deals.routes';
 import tasksRoutes from './routes/tasks.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import companyRoutes from './routes/company.routes';
+import emailsRoutes from './routes/emails.routes';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -32,6 +33,7 @@ initEmailTransport();
 app.use('/api/leads', leadsRoutes);
 app.use('/api/deals', dealsRoutes);
 app.use('/api/tasks', tasksRoutes);
+app.use('/api/emails', emailsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/company', companyRoutes);
 
@@ -53,7 +55,7 @@ app.post('/api/workflow/start', async (req, res) => {
     const engine = new WorkflowEngine();
     const result = await engine.startWorkflow(leadId);
 
-    res.json({ success: true, message: 'Workflow started', ...result });
+    res.json({ success: true, ...result });
   } catch (error: any) {
     console.error('Workflow error:', error);
     res.status(500).json({ error: error.message });

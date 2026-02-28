@@ -57,6 +57,7 @@ export interface Deal {
   total_amount: number;
   qualification_result?: string;
   sales_notes?: string;
+  negotiation_round?: number;
   status?: string;
 }
 
@@ -183,8 +184,8 @@ export const DealDB = {
     const stmt = db.prepare(`
       INSERT INTO deals (lead_id, deal_value, product_name, quantity, subtotal,
                         fpa_rate, fpa_amount, total_amount, qualification_result,
-                        sales_notes, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        sales_notes, negotiation_round, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       deal.lead_id,
@@ -197,6 +198,7 @@ export const DealDB = {
       deal.total_amount,
       deal.qualification_result || null,
       deal.sales_notes || null,
+      deal.negotiation_round || 0,
       deal.status || 'pending'
     );
     return result.lastInsertRowid as number;

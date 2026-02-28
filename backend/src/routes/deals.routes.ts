@@ -40,4 +40,32 @@ router.get('/:id', (req: Request, res: Response) => {
   }
 });
 
+// POST /api/deals/:id/check-reply - Check inbox for customer reply and negotiate
+router.post('/:id/check-reply', async (req: Request, res: Response) => {
+  try {
+    const dealId = parseInt(req.params.id);
+    const deal = DealDB.findById(dealId);
+
+    if (!deal) {
+      return res.status(404).json({ error: 'Deal not found' });
+    }
+
+    if (!['proposal_sent', 'negotiating'].includes(deal.status || '')) {
+      return res.status(400).json({
+        error: `Deal is in '${deal.status}' status. Only 'proposal_sent' or 'negotiating' deals can check for replies.`,
+      });
+    }
+
+    // Lazy import to avoid circular deps
+    const { WorkflowEngine } = await import('../services/workflow-engine');
+    const engine = new WorkflowEngine();
+    const result = await engine.processReply(dealId);
+
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    console.error('Check reply error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
