@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { LeadDB } from '../database/db';
+import { LeadDB, CompanyProfileDB } from '../database/db';
 import { CreateLeadRequest } from '../types';
 
 const router = Router();
@@ -7,7 +7,9 @@ const router = Router();
 // GET /api/leads - Get all leads
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const leads = await LeadDB.all();
+    const companyId = await CompanyProfileDB.getActiveId();
+    if (!companyId) return res.status(400).json({ error: 'No active company' });
+    const leads = await LeadDB.all(companyId);
     res.json(leads);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -36,7 +38,11 @@ router.post('/', async (req: Request<{}, {}, CreateLeadRequest>, res: Response) 
       return res.status(400).json({ error: 'companyName and contactName are required' });
     }
 
+    const companyId = await CompanyProfileDB.getActiveId();
+    if (!companyId) return res.status(400).json({ error: 'No active company' });
+
     const leadId = await LeadDB.create({
+      company_id: companyId,
       company_name: companyName,
       contact_name: contactName,
       contact_email: contactEmail,

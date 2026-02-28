@@ -4,11 +4,12 @@ const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-export type ModelTier = 'sonnet' | 'haiku';
+export type ModelTier = 'sonnet' | 'haiku' | 'opus';
 
 const MODELS: Record<ModelTier, string> = {
   sonnet: 'claude-sonnet-4-5-20250929',
-  haiku: 'claude-haiku-4-5-20251001',
+  haiku:  'claude-haiku-4-5-20251001',
+  opus:   'claude-opus-4-6',
 };
 
 export interface AIResponse {

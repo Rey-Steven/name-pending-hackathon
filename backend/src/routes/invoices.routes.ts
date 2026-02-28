@@ -1,12 +1,14 @@
 import { Router, Request, Response } from 'express';
-import { InvoiceDB } from '../database/db';
+import { InvoiceDB, CompanyProfileDB } from '../database/db';
 
 const router = Router();
 
 // GET /api/invoices - Get all invoices
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const invoices = await InvoiceDB.all();
+    const companyId = await CompanyProfileDB.getActiveId();
+    if (!companyId) return res.status(400).json({ error: 'No active company' });
+    const invoices = await InvoiceDB.all(companyId);
     res.json(invoices);
   } catch (error: any) {
     res.status(500).json({ error: error.message });

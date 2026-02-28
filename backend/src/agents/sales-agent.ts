@@ -8,7 +8,7 @@ import { broadcastEvent } from '../routes/dashboard.routes';
 
 export class SalesAgent extends BaseAgent {
   constructor(companyProfile: CompanyProfileContext | null = null) {
-    super('sales', 'sonnet', companyProfile);
+    super('sales', 'opus', companyProfile);
   }
 
   // ─── System prompt for initial deal processing ───────────────
@@ -83,6 +83,7 @@ Set "qualification" to "close" — we always contact this lead. Use BANT to info
     // Pricing deferred — set to 0 until customer expresses interest and we understand their needs.
     // Actual pricing is calculated when the customer replies and triggers wants_offer/counter/new_offer.
     const dealId = await DealDB.create({
+      company_id: this.companyProfile?.id,
       lead_id: leadId,
       deal_value: 0,
       product_name: result.data.productName,
@@ -114,6 +115,7 @@ Set "qualification" to "close" — we always contact this lead. Use BANT to info
       inputData: { dealId, leadId, salesResult: result.data, emailType: 'cold_outreach' },
       dealId,
       leadId,
+      companyId: this.companyProfile?.id,
     });
 
     return { salesResult: result, dealId };
@@ -215,7 +217,7 @@ Analyze this reply in stage "${dealStatus}" and decide the next action.`;
     });
 
     try {
-      const response = await callAI(systemPrompt, userPrompt, 'sonnet');
+      const response = await callAI(systemPrompt, userPrompt, 'opus');
       const result = parseJSONResponse<ReplyAnalysisResult>(response.content);
 
       if (result.reasoning) {

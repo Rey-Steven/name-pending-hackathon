@@ -130,6 +130,7 @@ export async function pollLostDeals(): Promise<void> {
 
         // Create a fresh lead with the same company/contact info
         const newLeadId = await LeadDB.create({
+          company_id: lead.company_id,
           company_name: lead.company_name,
           contact_name: lead.contact_name,
           contact_email: lead.contact_email,

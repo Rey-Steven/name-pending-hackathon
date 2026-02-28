@@ -5,7 +5,7 @@ import { TaskQueue } from '../services/task-queue';
 
 export class MarketingAgent extends BaseAgent {
   constructor(companyProfile: CompanyProfileContext | null = null) {
-    super('marketing', 'sonnet', companyProfile);
+    super('marketing', 'opus', companyProfile);
   }
 
   getSystemPrompt(): string {

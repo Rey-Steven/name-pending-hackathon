@@ -87,7 +87,7 @@ export class WorkflowEngine {
       // PHASE 1c: Send cold outreach email via task queue
       console.log('\n📍 PHASE 1c: Email Agent — Cold Outreach');
 
-      const emailTasks = await TaskQueue.getPending('email');
+      const emailTasks = await TaskQueue.getPending('email', companyProfile?.id || '');
       if (emailTasks.length === 0) {
         throw new Error(`No pending email task found for deal #${dealId}`);
       }
@@ -381,7 +381,7 @@ export class WorkflowEngine {
   private async completeWorkflow(dealId: string, leadId: string, deal: any) {
     console.log('\n📍 Running Legal → Accounting → Invoice pipeline');
 
-    const { legalAgent, accountingAgent, emailAgent } = await this.createAgents();
+    const { companyProfile, legalAgent, accountingAgent, emailAgent } = await this.createAgents();
 
     const salesData = {
       productName: deal.product_name,
@@ -408,7 +408,7 @@ export class WorkflowEngine {
     }
 
     // Send invoice email
-    const invoiceEmailTasks = await TaskQueue.getPending('email');
+    const invoiceEmailTasks = await TaskQueue.getPending('email', companyProfile?.id || '');
     for (const task of invoiceEmailTasks) {
       const taskData = await TaskQueue.getTaskWithData(task.id!);
       if (!taskData) continue;

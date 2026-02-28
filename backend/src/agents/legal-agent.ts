@@ -4,7 +4,7 @@ import { LeadDB, DealDB, LegalValidationDB } from '../database/db';
 
 export class LegalAgent extends BaseAgent {
   constructor(companyProfile: CompanyProfileContext | null = null) {
-    super('legal', 'sonnet', companyProfile);
+    super('legal', 'opus', companyProfile);
   }
 
   getSystemPrompt(): string {
@@ -67,6 +67,7 @@ Note: For this B2B transaction, generate a realistic AFM number for validation p
     );
 
     await LegalValidationDB.create({
+      company_id: this.companyProfile?.id,
       deal_id: dealId,
       afm_valid: result.data.afmValid,
       afm_number: `${100000000 + Math.floor(Math.random() * 900000000)}`,

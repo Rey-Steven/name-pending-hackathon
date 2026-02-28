@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { LeadDB, DealDB, TaskDB, InvoiceDB, EmailDB, AuditLog } from '../database/db';
+import { LeadDB, DealDB, TaskDB, InvoiceDB, EmailDB, AuditLog, CompanyProfileDB } from '../database/db';
 import { SSEEvent } from '../types';
 
 const router = Router();
@@ -10,12 +10,14 @@ const sseClients: Set<Response> = new Set();
 // GET /api/dashboard/stats - Dashboard statistics
 router.get('/stats', async (_req: Request, res: Response) => {
   try {
+    const companyId = await CompanyProfileDB.getActiveId();
+    if (!companyId) return res.status(400).json({ error: 'No active company' });
     const [leads, deals, tasks, invoices, emails] = await Promise.all([
-      LeadDB.all(),
-      DealDB.all(),
-      TaskDB.all(),
-      InvoiceDB.all(),
-      EmailDB.all(),
+      LeadDB.all(companyId),
+      DealDB.all(companyId),
+      TaskDB.all(companyId),
+      InvoiceDB.all(companyId),
+      EmailDB.all(companyId),
     ]);
 
     res.json({

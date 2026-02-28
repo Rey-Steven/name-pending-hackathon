@@ -5,13 +5,13 @@ import { CompanyProfileContext } from '../types';
 
 const router = Router();
 
-async function getEmailAgent(): Promise<EmailAgent> {
+async function getEmailAgent(): Promise<{ agent: EmailAgent; companyId: string | null }> {
   const profile = await CompanyProfileDB.get();
-  if (!profile) return new EmailAgent(null);
+  if (!profile) return { agent: new EmailAgent(null), companyId: null };
   try {
     const agentContexts = JSON.parse(profile.agent_context_json || '{}');
     const ctx: CompanyProfileContext = {
-      id: 'main',
+      id: profile.id!,
       name: profile.name,
       website: profile.website,
       logo_path: profile.logo_path,
@@ -23,17 +23,25 @@ async function getEmailAgent(): Promise<EmailAgent> {
       geographic_focus: profile.geographic_focus,
       agentContexts,
       kad_codes: profile.kad_codes,
+      pricing_model: profile.pricing_model,
+      min_deal_value: profile.min_deal_value,
+      max_deal_value: profile.max_deal_value,
+      key_products: profile.key_products,
+      unique_selling_points: profile.unique_selling_points,
+      communication_language: profile.communication_language,
     };
-    return new EmailAgent(ctx);
+    return { agent: new EmailAgent(ctx), companyId: profile.id! };
   } catch {
-    return new EmailAgent(null);
+    return { agent: new EmailAgent(null), companyId: null };
   }
 }
 
 // GET /api/emails - Get all sent emails from our database
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const emails = await EmailDB.all();
+    const companyId = await CompanyProfileDB.getActiveId();
+    if (!companyId) return res.status(400).json({ error: 'No active company' });
+    const emails = await EmailDB.all(companyId);
     res.json(emails);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -44,7 +52,7 @@ router.get('/', async (_req: Request, res: Response) => {
 router.get('/inbox', async (req: Request, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 20;
-    const emailAgent = await getEmailAgent();
+    const { agent: emailAgent } = await getEmailAgent();
     const emails = await emailAgent.getInbox(limit);
     res.json({ count: emails.length, emails });
   } catch (error: any) {
@@ -56,7 +64,7 @@ router.get('/inbox', async (req: Request, res: Response) => {
 // GET /api/emails/unread - Fetch only unread emails from inbox
 router.get('/unread', async (_req: Request, res: Response) => {
   try {
-    const emailAgent = await getEmailAgent();
+    const { agent: emailAgent } = await getEmailAgent();
     const emails = await emailAgent.getUnread();
     res.json({ count: emails.length, emails });
   } catch (error: any) {
@@ -68,7 +76,9 @@ router.get('/unread', async (_req: Request, res: Response) => {
 // GET /api/emails/threads - Get email threads grouped by deal
 router.get('/threads', async (_req: Request, res: Response) => {
   try {
-    const allEmails = await EmailDB.all();
+    const companyId = await CompanyProfileDB.getActiveId();
+    if (!companyId) return res.status(400).json({ error: 'No active company' });
+    const allEmails = await EmailDB.all(companyId);
 
     // Group by deal_id
     const threadMap = new Map<string, any[]>();
@@ -143,7 +153,7 @@ router.get('/threads', async (_req: Request, res: Response) => {
 // GET /api/emails/replies - Fetch replies matched to our sent emails
 router.get('/replies', async (_req: Request, res: Response) => {
   try {
-    const emailAgent = await getEmailAgent();
+    const { agent: emailAgent } = await getEmailAgent();
     const replies = await emailAgent.getReplies();
     res.json({ count: replies.length, replies });
   } catch (error: any) {
@@ -163,7 +173,7 @@ router.post('/reply/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Email not found' });
     }
 
-    const emailAgent = await getEmailAgent();
+    const { agent: emailAgent } = await getEmailAgent();
     const result = await emailAgent.processReply({
       originalEmail: sentEmail,
       customerReply: customMessage || 'Follow-up requested',
@@ -180,7 +190,7 @@ router.post('/reply/:id', async (req: Request, res: Response) => {
 // POST /api/emails/check-replies - Check inbox for new replies and auto-process them
 router.post('/check-replies', async (_req: Request, res: Response) => {
   try {
-    const emailAgent = await getEmailAgent();
+    const { agent: emailAgent } = await getEmailAgent();
     const results = await emailAgent.checkAndProcessReplies();
 
     res.json({

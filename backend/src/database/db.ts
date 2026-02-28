@@ -29,6 +29,7 @@ async function softDeleteDoc(collection: string, id: string): Promise<void> {
 
 export interface Lead {
   id?: string;
+  company_id?: string;
   company_name: string;
   contact_name: string;
   contact_email?: string;
@@ -47,6 +48,7 @@ export interface Lead {
 
 export interface Deal {
   id?: string;
+  company_id?: string;
   lead_id: string;
   deal_value: number;
   product_name: string;
@@ -68,6 +70,7 @@ export interface Deal {
 
 export interface Task {
   id?: string;
+  company_id?: string;
   deal_id?: string;
   lead_id?: string;
   source_agent: 'marketing' | 'sales' | 'legal' | 'accounting' | 'email';
@@ -88,6 +91,7 @@ export interface Task {
 
 export interface Invoice {
   id?: string;
+  company_id?: string;
   deal_id: string;
   invoice_number: string;
   invoice_date?: string;
@@ -112,6 +116,7 @@ export interface Invoice {
 
 export interface Email {
   id?: string;
+  company_id?: string;
   task_id?: string;
   deal_id?: string;
   invoice_id?: string;
@@ -132,6 +137,7 @@ export interface Email {
 
 export interface LegalValidation {
   id?: string;
+  company_id?: string;
   deal_id: string;
   afm_valid?: boolean;
   afm_number?: string;
@@ -182,6 +188,7 @@ export const LeadDB = {
   create: async (lead: Lead): Promise<string> => {
     const now = new Date().toISOString();
     const ref = await fdb().collection('leads').add({
+      company_id: lead.company_id || null,
       company_name: lead.company_name,
       contact_name: lead.contact_name,
       contact_email: lead.contact_email || null,
@@ -215,8 +222,11 @@ export const LeadDB = {
 
   delete: async (id: string): Promise<void> => softDeleteDoc('leads', id),
 
-  all: async (): Promise<Lead[]> => {
-    const snap = await fdb().collection('leads').orderBy('created_at', 'desc').get();
+  all: async (companyId: string): Promise<Lead[]> => {
+    const snap = await fdb().collection('leads')
+      .where('company_id', '==', companyId)
+      .orderBy('created_at', 'desc')
+      .get();
     return snapToDocs<Lead>(snap);
   },
 };
@@ -227,6 +237,7 @@ export const DealDB = {
   create: async (deal: Deal): Promise<string> => {
     const now = new Date().toISOString();
     const ref = await fdb().collection('deals').add({
+      company_id: deal.company_id || null,
       lead_id: deal.lead_id,
       deal_value: deal.deal_value,
       product_name: deal.product_name,
@@ -261,8 +272,11 @@ export const DealDB = {
 
   delete: async (id: string): Promise<void> => softDeleteDoc('deals', id),
 
-  all: async (): Promise<Deal[]> => {
-    const snap = await fdb().collection('deals').orderBy('created_at', 'desc').get();
+  all: async (companyId: string): Promise<Deal[]> => {
+    const snap = await fdb().collection('deals')
+      .where('company_id', '==', companyId)
+      .orderBy('created_at', 'desc')
+      .get();
     return snapToDocs<Deal>(snap);
   },
 
@@ -280,6 +294,7 @@ export const TaskDB = {
   create: async (task: Task): Promise<string> => {
     const now = new Date().toISOString();
     const ref = await fdb().collection('tasks').add({
+      company_id: task.company_id || null,
       deal_id: task.deal_id || null,
       lead_id: task.lead_id || null,
       source_agent: task.source_agent,
@@ -305,9 +320,10 @@ export const TaskDB = {
     return docToObj<Task>(doc);
   },
 
-  findPending: async (targetAgent: string): Promise<Task[]> => {
+  findPending: async (targetAgent: string, companyId: string): Promise<Task[]> => {
     const snap = await fdb().collection('tasks')
       .where('target_agent', '==', targetAgent)
+      .where('company_id', '==', companyId)
       .get();
     return snapToDocs<Task>(snap)
       .filter(t => t.status === 'pending')
@@ -328,8 +344,11 @@ export const TaskDB = {
 
   delete: async (id: string): Promise<void> => softDeleteDoc('tasks', id),
 
-  all: async (): Promise<Task[]> => {
-    const snap = await fdb().collection('tasks').orderBy('created_at', 'desc').get();
+  all: async (companyId: string): Promise<Task[]> => {
+    const snap = await fdb().collection('tasks')
+      .where('company_id', '==', companyId)
+      .orderBy('created_at', 'desc')
+      .get();
     return snapToDocs<Task>(snap);
   },
 
@@ -346,6 +365,7 @@ export const InvoiceDB = {
   create: async (invoice: Invoice): Promise<string> => {
     const now = new Date().toISOString();
     const ref = await fdb().collection('invoices').add({
+      company_id: invoice.company_id || null,
       deal_id: invoice.deal_id,
       invoice_number: invoice.invoice_number,
       invoice_date: invoice.invoice_date || null,
@@ -382,8 +402,11 @@ export const InvoiceDB = {
     return docs.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0];
   },
 
-  all: async (): Promise<Invoice[]> => {
-    const snap = await fdb().collection('invoices').orderBy('created_at', 'desc').get();
+  all: async (companyId: string): Promise<Invoice[]> => {
+    const snap = await fdb().collection('invoices')
+      .where('company_id', '==', companyId)
+      .orderBy('created_at', 'desc')
+      .get();
     return snapToDocs<Invoice>(snap);
   },
 
@@ -408,6 +431,7 @@ export const EmailDB = {
   create: async (email: Email): Promise<string> => {
     const now = new Date().toISOString();
     const ref = await fdb().collection('emails').add({
+      company_id: email.company_id || null,
       task_id: email.task_id || null,
       deal_id: email.deal_id || null,
       invoice_id: email.invoice_id || null,
@@ -442,8 +466,11 @@ export const EmailDB = {
 
   delete: async (id: string): Promise<void> => softDeleteDoc('emails', id),
 
-  all: async (): Promise<Email[]> => {
-    const snap = await fdb().collection('emails').orderBy('created_at', 'desc').get();
+  all: async (companyId: string): Promise<Email[]> => {
+    const snap = await fdb().collection('emails')
+      .where('company_id', '==', companyId)
+      .orderBy('created_at', 'desc')
+      .get();
     return snapToDocs<Email>(snap);
   },
 
@@ -499,6 +526,7 @@ export const LegalValidationDB = {
   create: async (validation: LegalValidation): Promise<string> => {
     const now = new Date().toISOString();
     const ref = await fdb().collection('legal_validations').add({
+      company_id: validation.company_id || null,
       deal_id: validation.deal_id,
       afm_valid: validation.afm_valid ?? false,
       afm_number: validation.afm_number || null,

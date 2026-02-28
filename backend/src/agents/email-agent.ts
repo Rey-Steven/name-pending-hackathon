@@ -46,7 +46,7 @@ export class EmailAgent extends BaseAgent {
   private mode: EmailAgentMode = 'compose';
 
   constructor(companyProfile: CompanyProfileContext | null = null) {
-    super('email', 'haiku', companyProfile);
+    super('email', 'opus', companyProfile);
   }
 
   // ─── Prompt routing (mode-switched) ───
@@ -300,6 +300,7 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
     });
 
     await EmailDB.create({
+      company_id: this.companyProfile?.id,
       task_id: context.taskId,
       deal_id: context.dealId,
       invoice_id: context.invoiceId,
@@ -338,6 +339,7 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
     });
 
     await EmailDB.create({
+      company_id: this.companyProfile?.id,
       task_id: params.taskId,
       deal_id: params.dealId,
       invoice_id: params.invoiceId,
@@ -395,6 +397,7 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
     });
 
     await EmailDB.create({
+      company_id: this.companyProfile?.id,
       deal_id: input.dealId,
       recipient_email: recipientEmail,
       recipient_name: result.data.recipientName || input.customerName || '',
@@ -486,6 +489,7 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
     if (existing) return;
 
     await EmailDB.create({
+      company_id: this.companyProfile?.id,
       deal_id: dealId,
       recipient_email: process.env.GMAIL_USER || '',
       recipient_name: 'AgentFlow',

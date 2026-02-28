@@ -7,7 +7,9 @@ const router = Router();
 // GET /api/deals - Get all deals
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const deals = await DealDB.all();
+    const companyId = await CompanyProfileDB.getActiveId();
+    if (!companyId) return res.status(400).json({ error: 'No active company' });
+    const deals = await DealDB.all(companyId);
     res.json(deals);
   } catch (error: any) {
     res.status(500).json({ error: error.message });

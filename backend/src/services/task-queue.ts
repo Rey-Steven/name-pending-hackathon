@@ -12,8 +12,10 @@ export class TaskQueue {
     dealId?: string;
     leadId?: string;
     priority?: number;
+    companyId?: string;
   }): Promise<string> {
     const taskId = await TaskDB.create({
+      company_id: params.companyId,
       source_agent: params.sourceAgent,
       target_agent: params.targetAgent,
       task_type: params.taskType,
@@ -47,8 +49,8 @@ export class TaskQueue {
     });
   }
 
-  static async getPending(targetAgent: AgentType): Promise<Task[]> {
-    return TaskDB.findPending(targetAgent);
+  static async getPending(targetAgent: AgentType, companyId: string): Promise<Task[]> {
+    return TaskDB.findPending(targetAgent, companyId);
   }
 
   static async getTaskWithData(taskId: string): Promise<(Task & { parsedInput: any }) | null> {

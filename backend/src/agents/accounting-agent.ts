@@ -5,7 +5,7 @@ import { TaskQueue } from '../services/task-queue';
 
 export class AccountingAgent extends BaseAgent {
   constructor(companyProfile: CompanyProfileContext | null = null) {
-    super('accounting', 'haiku', companyProfile);
+    super('accounting', 'opus', companyProfile);
   }
 
   getSystemPrompt(): string {
@@ -94,6 +94,7 @@ Generate the full invoice and accounting entries.`;
     const invoiceNumber = await InvoiceDB.getNextInvoiceNumber();
 
     const invoiceId = await InvoiceDB.create({
+      company_id: this.companyProfile?.id,
       deal_id: dealId,
       invoice_number: invoiceNumber,
       invoice_date: result.data.invoiceDate,
@@ -128,6 +129,7 @@ Generate the full invoice and accounting entries.`;
       },
       dealId,
       leadId,
+      companyId: this.companyProfile?.id,
     });
 
     return result;
