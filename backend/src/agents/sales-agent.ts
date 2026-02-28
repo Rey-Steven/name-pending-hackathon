@@ -1,7 +1,10 @@
 import { BaseAgent } from './base-agent';
-import { SalesResult } from '../types';
+import { SalesResult, NegotiationResult } from '../types';
 import { LeadDB, DealDB, Lead } from '../database/db';
 import { TaskQueue } from '../services/task-queue';
+import { callAI, parseJSONResponse } from '../services/ai-service';
+import { AuditLog } from '../database/db';
+import { broadcastEvent } from '../routes/dashboard.routes';
 
 export class SalesAgent extends BaseAgent {
   constructor() {
@@ -73,7 +76,8 @@ Evaluate BANT criteria, decide to close/nurture/reject, and calculate pricing if
     const result = await this.execute<SalesResult>({ lead, marketingResult }, { leadId });
 
     if (result.data.qualification === 'close') {
-      // Create deal in database
+      // Create deal with 'proposal_sent' status — NOT 'legal_review'
+      // Legal/Accounting only run after customer accepts the proposal
       const dealId = DealDB.create({
         lead_id: leadId,
         deal_value: result.data.subtotal,
@@ -90,44 +94,21 @@ Evaluate BANT criteria, decide to close/nurture/reject, and calculate pricing if
           timeline: result.data.timeline,
         }),
         sales_notes: result.data.proposalSummary,
-        status: 'legal_review',
+        negotiation_round: 0,
+        status: 'proposal_sent',
       });
 
       // Update lead status
-      LeadDB.update(leadId, { status: 'converted' });
+      LeadDB.update(leadId, { status: 'contacted' });
 
-      // Create task for Legal Agent
-      TaskQueue.createTask({
-        sourceAgent: 'sales',
-        targetAgent: 'legal',
-        taskType: 'review_contract',
-        title: `Legal review: ${lead.company_name}`,
-        description: `Deal value: €${result.data.totalAmount.toFixed(2)}`,
-        inputData: { dealId, leadId, salesResult: result.data },
-        dealId,
-        leadId,
-      });
-
-      // Create task for Accounting Agent
-      TaskQueue.createTask({
-        sourceAgent: 'sales',
-        targetAgent: 'accounting',
-        taskType: 'generate_invoice',
-        title: `Generate invoice: ${lead.company_name}`,
-        description: `Amount: €${result.data.totalAmount.toFixed(2)}`,
-        inputData: { dealId, leadId, salesResult: result.data },
-        dealId,
-        leadId,
-      });
-
-      // Create task for Email (proposal confirmation)
+      // Create ONLY the proposal email task — no Legal/Accounting yet
       TaskQueue.createTask({
         sourceAgent: 'sales',
         targetAgent: 'email',
-        taskType: 'send_confirmation',
-        title: `Send confirmation: ${lead.company_name}`,
-        description: `Confirm deal closure to ${lead.contact_name}`,
-        inputData: { dealId, leadId, salesResult: result.data, emailType: 'confirmation' },
+        taskType: 'send_proposal',
+        title: `Send proposal: ${lead.company_name}`,
+        description: `Proposal for €${result.data.totalAmount.toFixed(2)} - awaiting customer reply`,
+        inputData: { dealId, leadId, salesResult: result.data, emailType: 'proposal' },
         dealId,
         leadId,
       });
@@ -138,5 +119,142 @@ Evaluate BANT criteria, decide to close/nurture/reject, and calculate pricing if
     // If not closing, update lead status
     LeadDB.update(leadId, { status: result.data.qualification === 'nurture' ? 'contacted' : 'rejected' });
     return { salesResult: result };
+  }
+
+  // Negotiation: analyze customer reply and decide next action
+  async negotiateReply(params: {
+    dealId: number;
+    leadId: number;
+    customerReply: string;
+    currentDeal: any;
+    roundNumber: number;
+    maxRounds: number;
+  }): Promise<NegotiationResult> {
+    const { dealId, leadId, customerReply, currentDeal, roundNumber, maxRounds } = params;
+    const lead = LeadDB.findById(leadId);
+    if (!lead) throw new Error(`Lead ${leadId} not found`);
+
+    const isLastRound = roundNumber >= maxRounds;
+
+    const systemPrompt = `You are a Sales Negotiation AI agent for a Greek B2B company. A customer has replied to your proposal and you must analyze their response and decide the next action.
+
+You are in negotiation round ${roundNumber} of ${maxRounds} maximum rounds.
+
+RULES:
+- If the customer ACCEPTS the offer (positive response, agrees to terms, wants to proceed): action = "accept"
+- If the customer DECLINES or has objections but negotiation is possible: action = "counter_offer"
+  - You may adjust price by up to 15% total from original
+  - You may adjust payment terms (Net 30 → Net 45/60)
+  - You may add value (free shipping, extended warranty, volume bonus)
+  - Always maintain minimum 10% margin
+- If this is the LAST round (${isLastRound ? 'YES - THIS IS THE LAST ROUND' : 'no'}), or customer firmly refuses: action = "give_up"
+  - Provide a detailed failureReason analyzing WHY the deal did not go through
+
+IMPORTANT: Write the responseBody in Greek language. This is the email that will be sent to the customer.
+${isLastRound ? '\nIMPORTANT: This is the FINAL round. If the customer has not accepted, you MUST give_up and provide a failureReason.' : ''}
+
+ALWAYS respond with valid JSON:
+{
+  "reasoning": ["step 1 - analyze customer reply", "step 2 - evaluate objection", "step 3 - decide action", "..."],
+  "decision": "Brief description of negotiation decision",
+  "data": {
+    "action": "accept" | "counter_offer" | "give_up",
+    "customerSentiment": "positive" | "neutral" | "negative",
+    "objectionSummary": "What the customer objects to",
+    "revisedSubtotal": null or new number,
+    "revisedFpaAmount": null or new number,
+    "revisedTotal": null or new number,
+    "revisedTerms": null or "new payment terms",
+    "responseSubject": "Re: original subject in Greek",
+    "responseBody": "Full email reply in Greek",
+    "failureReason": null or "detailed analysis of why deal failed"
+  }
+}`;
+
+    const userPrompt = `CURRENT DEAL:
+- Company: ${lead.company_name}
+- Contact: ${lead.contact_name} (${lead.contact_email})
+- Product: ${currentDeal.product_name}
+- Current Price: €${currentDeal.subtotal} + FPA (24%) = €${currentDeal.total_amount}
+- Payment Terms: Net 30 days
+- Negotiation Round: ${roundNumber} of ${maxRounds}
+
+CUSTOMER'S REPLY:
+"${customerReply}"
+
+Analyze the customer's reply and decide your next move. Write your response email in Greek.`;
+
+    console.log(`\n${'='.repeat(50)}`);
+    console.log(`  🤝 SALES NEGOTIATION - Round ${roundNumber}/${maxRounds}`);
+    console.log(`  📋 Deal #${dealId} - ${lead.company_name}`);
+    console.log(`${'='.repeat(50)}`);
+
+    broadcastEvent({
+      type: 'agent_started',
+      agent: 'sales',
+      dealId,
+      leadId,
+      message: `Sales negotiation round ${roundNumber} - analyzing customer reply`,
+      timestamp: new Date().toISOString(),
+    });
+
+    try {
+      const response = await callAI(systemPrompt, userPrompt, 'sonnet');
+      const result = parseJSONResponse<NegotiationResult>(response.content);
+
+      // Log reasoning
+      if (result.reasoning) {
+        console.log(`\n  🧠 Negotiation reasoning:`);
+        result.reasoning.forEach((step, i) => {
+          console.log(`     ${i + 1}. ${step}`);
+        });
+      }
+      console.log(`  📋 Decision: ${result.decision}`);
+      console.log(`  🎯 Action: ${result.data.action}`);
+      console.log(`  💭 Sentiment: ${result.data.customerSentiment}`);
+      console.log(`  📝 Objection: ${result.data.objectionSummary}`);
+
+      if (result.data.action === 'counter_offer' && result.data.revisedTotal) {
+        console.log(`  💰 Revised price: €${result.data.revisedTotal}`);
+      }
+      if (result.data.action === 'give_up' && result.data.failureReason) {
+        console.log(`  ❌ Why deal failed: ${result.data.failureReason}`);
+      }
+
+      broadcastEvent({
+        type: 'agent_completed',
+        agent: 'sales',
+        dealId,
+        leadId,
+        message: `Negotiation round ${roundNumber}: ${result.data.action} - ${result.decision}`,
+        reasoning: result.reasoning,
+        data: result.data,
+        timestamp: new Date().toISOString(),
+      });
+
+      AuditLog.log('sales', 'negotiation_round', 'deal', dealId, {
+        round: roundNumber,
+        action: result.data.action,
+        sentiment: result.data.customerSentiment,
+        objection: result.data.objectionSummary,
+        revisedTotal: result.data.revisedTotal,
+        failureReason: result.data.failureReason,
+      });
+
+      return result;
+    } catch (error: any) {
+      console.error(`  ❌ Negotiation failed: ${error.message}`);
+
+      broadcastEvent({
+        type: 'agent_failed',
+        agent: 'sales',
+        dealId,
+        leadId,
+        message: `Negotiation failed: ${error.message}`,
+        timestamp: new Date().toISOString(),
+      });
+
+      throw error;
+    }
   }
 }

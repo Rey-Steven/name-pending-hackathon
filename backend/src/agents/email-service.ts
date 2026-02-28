@@ -18,6 +18,7 @@ When composing an email, you must:
 4. Be professional and concise
 
 Email types:
+- "proposal": Business proposal with pricing (invite customer to reply to discuss/accept)
 - "confirmation": Deal closure confirmation
 - "invoice": Invoice delivery email
 - "follow_up": Follow-up message
@@ -39,7 +40,7 @@ ALWAYS respond with valid JSON in this exact format:
     "body": "full email body in Greek",
     "recipientEmail": "MUST use exact email from recipient info",
     "recipientName": "name",
-    "emailType": "confirmation" | "invoice" | "follow_up"
+    "emailType": "proposal" | "confirmation" | "invoice" | "follow_up"
   }
 }`;
   }
@@ -48,12 +49,29 @@ ALWAYS respond with valid JSON in this exact format:
     const { lead, emailType, salesResult, invoiceData, invoiceNumber } = input;
 
     let context = '';
-    if (emailType === 'confirmation' && salesResult) {
+    if (emailType === 'proposal' && salesResult) {
+      context = `
+PROPOSAL TO SEND:
+- Product: ${salesResult.productName}
+- Quantity: ${salesResult.quantity}
+- Unit Price: €${salesResult.unitPrice}
+- Subtotal: €${salesResult.subtotal}
+- FPA (24%): €${salesResult.fpaAmount}
+- Total Amount: €${salesResult.totalAmount}
+- Payment Terms: Net 30 days
+- Proposal Summary: ${salesResult.proposalSummary}
+
+Compose a professional proposal email that:
+1. Presents the offer with full pricing breakdown
+2. Highlights the value proposition
+3. CLEARLY invites the customer to reply - either to accept or to discuss/negotiate terms
+4. Make it clear they can reply directly to this email`;
+    } else if (emailType === 'confirmation' && salesResult) {
       context = `
 DEAL CONFIRMED:
 - Product: ${salesResult.productName}
 - Amount: €${salesResult.totalAmount}
-- The deal has been closed successfully.
+- The deal has been closed successfully after negotiation.
 Compose a confirmation email thanking the customer.`;
     } else if (emailType === 'invoice' && invoiceData) {
       context = `
@@ -85,7 +103,7 @@ Write the email in Greek language. Use the EXACT email address "${lead.contact_e
 
   async sendEmail(
     leadId: number,
-    emailType: 'confirmation' | 'invoice' | 'follow_up',
+    emailType: 'proposal' | 'confirmation' | 'invoice' | 'follow_up',
     context: { dealId?: number; salesResult?: any; invoiceData?: any; invoiceNumber?: string; invoiceId?: number }
   ): Promise<EmailResult> {
     const lead = LeadDB.findById(leadId);
