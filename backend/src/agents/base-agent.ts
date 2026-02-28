@@ -66,10 +66,24 @@ ${ctx}
       const userPrompt = this.buildUserPrompt(input);
 
       // Call AI
-      const response = await callAI(systemPrompt, userPrompt, this.modelTier);
+      let response = await callAI(systemPrompt, userPrompt, this.modelTier);
+      let result: T;
 
-      // Parse JSON response
-      const result = parseJSONResponse<T>(response.content);
+      // Parse JSON response (retry once if malformed/truncated)
+      try {
+        result = parseJSONResponse<T>(response.content);
+      } catch (parseError: any) {
+        console.warn(`  ⚠️ ${this.agentType} JSON parse failed, retrying once with stricter format instruction...`);
+        const retryPrompt = `${userPrompt}
+
+IMPORTANT: Your previous response could not be parsed as valid JSON (${parseError?.message || 'parse error'}).
+Return ONLY valid JSON matching the exact schema.
+Do not use markdown fences.
+Keep reasoning to max 3 short items.
+Keep long text fields concise.`;
+        response = await callAI(systemPrompt, retryPrompt, this.modelTier);
+        result = parseJSONResponse<T>(response.content);
+      }
 
       const duration = Date.now() - startTime;
 

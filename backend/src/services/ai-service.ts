@@ -21,7 +21,7 @@ export async function callAI(
   systemPrompt: string,
   userPrompt: string,
   tier: ModelTier = 'sonnet',
-  maxTokens: number = 2048
+  maxTokens: number = 4096
 ): Promise<AIResponse> {
   const model = MODELS[tier];
 
@@ -49,7 +49,7 @@ export async function callAI(
   };
 }
 
-// Parse JSON from AI response, handling markdown code blocks
+// Parse JSON from AI response, handling markdown code blocks and extra text
 export function parseJSONResponse<T>(content: string): T {
   // Strip markdown code blocks if present
   let cleaned = content.trim();
@@ -63,5 +63,16 @@ export function parseJSONResponse<T>(content: string): T {
   }
   cleaned = cleaned.trim();
 
-  return JSON.parse(cleaned) as T;
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch {
+    // Fallback: try parsing the largest JSON object in the response
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      const jsonCandidate = cleaned.slice(firstBrace, lastBrace + 1);
+      return JSON.parse(jsonCandidate) as T;
+    }
+    throw new Error('Failed to parse AI JSON response');
+  }
 }
