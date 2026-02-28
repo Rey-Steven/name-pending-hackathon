@@ -72,6 +72,21 @@ export const emailsApi = {
   getReplies: () => api.get('/emails/replies'),
 }
 
+export const researchApi = {
+  getAll: () => api.get('/research'),
+  getLatest: () => api.get('/research/latest'),
+  getById: (id: string) => api.get(`/research/${id}`),
+  trigger: () => api.post('/research/trigger'),
+}
+
+export const contentApi = {
+  getAll: () => api.get('/content'),
+  getById: (id: string) => api.get(`/content/${id}`),
+  trigger: (researchId?: string) => api.post('/content/trigger', { researchId }),
+  updateStatus: (id: string, status: string) => api.patch(`/content/${id}/status`, { status }),
+  update: (id: string, data: { post_text?: string; hashtags?: string[] }) => api.patch(`/content/${id}`, data),
+}
+
 // SSE connection for real-time events
 export function connectToEvents(onEvent: (event: any) => void): EventSource {
   const eventSource = new EventSource('/api/dashboard/events')

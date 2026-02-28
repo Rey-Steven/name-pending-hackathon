@@ -91,19 +91,64 @@
 
           <!-- Right: Nav links -->
           <div class="flex items-center space-x-1">
-            <router-link
-              v-for="link in navLinks"
-              :key="link.path"
-              :to="link.path"
-              :class="[
-                'px-3 py-2 rounded-md text-sm font-medium',
-                route.path.startsWith(link.path) && link.path !== '/'
-                  ? 'bg-gray-100 text-gray-900'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-              ]"
+            <div
+              v-for="item in navItems"
+              :key="item.label"
+              :class="item.children ? 'relative' : ''"
+              :ref="(el) => { if (item.children) setDropdownRef(item.label, el) }"
             >
-              {{ link.label }}
-            </router-link>
+              <!-- Simple link (no children) -->
+              <router-link
+                v-if="!item.children"
+                :to="item.path || '/'"
+                :class="[
+                  'px-3 py-2 rounded-md text-sm font-medium',
+                  item.path && route.path.startsWith(item.path)
+                    ? 'bg-gray-100 text-gray-900'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                ]"
+              >
+                {{ item.label }}
+              </router-link>
+
+              <!-- Dropdown department -->
+              <template v-else>
+                <button
+                  @click.stop="toggleDropdown(item.label)"
+                  :class="[
+                    'px-3 py-2 rounded-md text-sm font-medium inline-flex items-center',
+                    isDepartmentActive(item)
+                      ? 'bg-gray-100 text-gray-900'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  ]"
+                >
+                  {{ item.label }}
+                  <svg class="w-3.5 h-3.5 ml-1 transition-transform" :class="openDropdown === item.label ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                <div
+                  v-if="openDropdown === item.label"
+                  class="absolute top-full left-0 mt-1 w-44 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-1"
+                >
+                  <router-link
+                    v-for="child in item.children"
+                    :key="child.path"
+                    :to="child.path"
+                    @click="openDropdown = null"
+                    :class="[
+                      'block px-4 py-2 text-sm',
+                      route.path.startsWith(child.path)
+                        ? 'bg-gray-50 text-gray-900 font-medium'
+                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    ]"
+                  >
+                    {{ child.label }}
+                  </router-link>
+                </div>
+              </template>
+            </div>
+
             <span class="w-px h-6 bg-gray-200 mx-2"></span>
             <router-link
               to="/help"
@@ -205,12 +250,63 @@ async function removeCompany(id: string) {
   }
 }
 
+// --- Navigation ---
+
+interface NavChild { label: string; path: string }
+interface NavItem { label: string; path?: string; children?: NavChild[] }
+
+const navItems: NavItem[] = [
+  { label: 'Dashboard', path: '/dashboard' },
+  { label: 'Sales', children: [
+    { label: 'Leads', path: '/leads' },
+    { label: 'Deals', path: '/deals' },
+  ]},
+  { label: 'Marketing', children: [
+    { label: 'Research', path: '/research' },
+    { label: 'Content', path: '/content' },
+  ]},
+  { label: 'Accounting', children: [
+    { label: 'Invoices', path: '/invoices' },
+  ]},
+  { label: 'Legal', children: [
+    { label: 'Contracts', path: '/legal/contracts' },
+  ]},
+  { label: 'Operations', children: [
+    { label: 'Tasks', path: '/tasks' },
+    { label: 'Emails', path: '/emails' },
+  ]},
+]
+
+const openDropdown = ref<string | null>(null)
+const dropdownRefs: Record<string, HTMLElement | null> = {}
+
+function setDropdownRef(label: string, el: any) {
+  dropdownRefs[label] = el as HTMLElement | null
+}
+
+function toggleDropdown(label: string) {
+  openDropdown.value = openDropdown.value === label ? null : label
+}
+
+function isDepartmentActive(item: NavItem): boolean {
+  return (item.children || []).some(c => route.path.startsWith(c.path))
+}
+
+// --- Click outside ---
+
 function onClickOutside(e: MouseEvent) {
   if (switcherRef.value && !switcherRef.value.contains(e.target as Node)) {
     switcherOpen.value = false
   }
   if (settingsRef.value && !settingsRef.value.contains(e.target as Node)) {
     settingsOpen.value = false
+  }
+  // Close nav dropdowns
+  if (openDropdown.value) {
+    const ref = dropdownRefs[openDropdown.value]
+    if (ref && !ref.contains(e.target as Node)) {
+      openDropdown.value = null
+    }
   }
 }
 
@@ -222,13 +318,4 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener('click', onClickOutside)
 })
-
-const navLinks = [
-  { path: '/dashboard', label: 'Dashboard' },
-  { path: '/leads', label: 'Leads' },
-  { path: '/deals', label: 'Deals' },
-  { path: '/tasks', label: 'Tasks' },
-  { path: '/invoices', label: 'Invoices' },
-  { path: '/emails', label: 'Emails' },
-]
 </script>

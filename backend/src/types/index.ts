@@ -10,7 +10,9 @@ export type TaskType =
   | 'send_proposal'      // Sales → Email
   | 'send_invoice'       // Accounting → Email
   | 'send_confirmation'  // Sales → Email
-  | 'send_follow_up';    // Any → Email
+  | 'send_follow_up'     // Any → Email
+  | 'market_research'    // Marketing (daily research)
+  | 'content_creation';  // Marketing (daily content)
 
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type LeadScore = 'A' | 'B' | 'C';
@@ -109,6 +111,54 @@ export interface EmailResult extends AgentResponse {
     recipientEmail: string;
     recipientName: string;
     emailType: 'proposal' | 'invoice' | 'confirmation' | 'follow_up' | 'satisfaction' | 'cold_outreach';
+  };
+}
+
+// Market Research output
+export interface MarketResearchResult extends AgentResponse {
+  data: {
+    marketTrends: Array<{
+      trend: string;
+      relevance: 'high' | 'medium' | 'low';
+      source: string;
+    }>;
+    competitorInsights: Array<{
+      competitor: string;
+      activity: string;
+      platform: string;
+      takeaway: string;
+    }>;
+    socialMediaHighlights: Array<{
+      platform: string;
+      content: string;
+      engagement: string;
+      relevance: string;
+    }>;
+    opportunities: string[];
+    threats: string[];
+    summary: string;
+  };
+}
+
+// Social Content Creation output
+export interface SocialContentResult extends AgentResponse {
+  data: {
+    instagram: {
+      postText: string;
+      hashtags: string[];
+      imageDescription: string;
+      bestPostingTime: string;
+      tone: string;
+    };
+    linkedin: {
+      postText: string;
+      hashtags: string[];
+      imageDescription: string;
+      bestPostingTime: string;
+      tone: string;
+    };
+    contentTheme: string;
+    basedOnResearchId: string;
   };
 }
 

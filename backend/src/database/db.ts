@@ -563,6 +563,159 @@ export const LegalValidationDB = {
   delete: async (id: string): Promise<void> => softDeleteDoc('legal_validations', id),
 };
 
+// ─── Market Research ─────────────────────────────────────────
+
+export interface MarketResearch {
+  id?: string;
+  company_id?: string;
+  search_queries?: string;     // JSON string: string[]
+  raw_search_results?: string; // JSON string: serialized search results
+  trends_json?: string;        // JSON string: trend objects
+  competitors_json?: string;   // JSON string: competitor insight objects
+  social_json?: string;        // JSON string: social media highlight objects
+  opportunities?: string;      // JSON string: string[]
+  threats?: string;            // JSON string: string[]
+  summary?: string;
+  ai_reasoning?: string;       // JSON string: string[]
+  status?: 'running' | 'completed' | 'failed';
+  error_message?: string;
+  triggered_by?: 'schedule' | 'manual';
+  created_at?: string;
+  completed_at?: string;
+  deleted_at?: string | null;
+}
+
+export const MarketResearchDB = {
+  create: async (research: MarketResearch): Promise<string> => {
+    const now = new Date().toISOString();
+    const ref = await fdb().collection('market_research').add({
+      company_id: research.company_id || null,
+      search_queries: research.search_queries || null,
+      raw_search_results: research.raw_search_results || null,
+      trends_json: research.trends_json || null,
+      competitors_json: research.competitors_json || null,
+      social_json: research.social_json || null,
+      opportunities: research.opportunities || null,
+      threats: research.threats || null,
+      summary: research.summary || null,
+      ai_reasoning: research.ai_reasoning || null,
+      status: research.status || 'running',
+      error_message: null,
+      triggered_by: research.triggered_by || 'manual',
+      created_at: now,
+      completed_at: null,
+      deleted_at: null,
+    });
+    return ref.id;
+  },
+
+  findById: async (id: string): Promise<MarketResearch | undefined> => {
+    const doc = await fdb().collection('market_research').doc(id).get();
+    return docToObj<MarketResearch>(doc);
+  },
+
+  update: async (id: string, updates: Partial<MarketResearch>): Promise<void> => {
+    const { id: _id, ...rest } = updates as any;
+    await fdb().collection('market_research').doc(id).update(rest);
+  },
+
+  getLatest: async (companyId: string): Promise<MarketResearch | undefined> => {
+    const snap = await fdb().collection('market_research')
+      .where('company_id', '==', companyId)
+      .where('status', '==', 'completed')
+      .orderBy('created_at', 'desc')
+      .limit(1)
+      .get();
+    const docs = snapToDocs<MarketResearch>(snap);
+    return docs[0];
+  },
+
+  all: async (companyId: string): Promise<MarketResearch[]> => {
+    const snap = await fdb().collection('market_research')
+      .where('company_id', '==', companyId)
+      .orderBy('created_at', 'desc')
+      .get();
+    return snapToDocs<MarketResearch>(snap);
+  },
+
+  delete: async (id: string): Promise<void> => softDeleteDoc('market_research', id),
+};
+
+// ─── Social Content ──────────────────────────────────────────
+
+export interface SocialContent {
+  id?: string;
+  company_id?: string;
+  research_id?: string;
+  platform: 'instagram' | 'linkedin';
+  post_text: string;
+  hashtags?: string;           // JSON string: string[]
+  image_description?: string;
+  best_posting_time?: string;
+  tone?: string;
+  content_theme?: string;
+  ai_reasoning?: string;       // JSON string: string[]
+  status?: 'draft' | 'approved' | 'posted' | 'archived';
+  triggered_by?: 'schedule' | 'manual';
+  created_at?: string;
+  updated_at?: string;
+  deleted_at?: string | null;
+}
+
+export const SocialContentDB = {
+  create: async (content: SocialContent): Promise<string> => {
+    const now = new Date().toISOString();
+    const ref = await fdb().collection('social_content').add({
+      company_id: content.company_id || null,
+      research_id: content.research_id || null,
+      platform: content.platform,
+      post_text: content.post_text,
+      hashtags: content.hashtags || null,
+      image_description: content.image_description || null,
+      best_posting_time: content.best_posting_time || null,
+      tone: content.tone || null,
+      content_theme: content.content_theme || null,
+      ai_reasoning: content.ai_reasoning || null,
+      status: content.status || 'draft',
+      triggered_by: content.triggered_by || 'manual',
+      created_at: now,
+      updated_at: now,
+      deleted_at: null,
+    });
+    return ref.id;
+  },
+
+  findById: async (id: string): Promise<SocialContent | undefined> => {
+    const doc = await fdb().collection('social_content').doc(id).get();
+    return docToObj<SocialContent>(doc);
+  },
+
+  update: async (id: string, updates: Partial<SocialContent>): Promise<void> => {
+    const { id: _id, ...rest } = updates as any;
+    await fdb().collection('social_content').doc(id).update({
+      ...rest,
+      updated_at: new Date().toISOString(),
+    });
+  },
+
+  all: async (companyId: string): Promise<SocialContent[]> => {
+    const snap = await fdb().collection('social_content')
+      .where('company_id', '==', companyId)
+      .orderBy('created_at', 'desc')
+      .get();
+    return snapToDocs<SocialContent>(snap);
+  },
+
+  findByResearch: async (researchId: string): Promise<SocialContent[]> => {
+    const snap = await fdb().collection('social_content')
+      .where('research_id', '==', researchId)
+      .get();
+    return snapToDocs<SocialContent>(snap);
+  },
+
+  delete: async (id: string): Promise<void> => softDeleteDoc('social_content', id),
+};
+
 // ─── Audit Log ────────────────────────────────────────────────
 
 export const AuditLog = {

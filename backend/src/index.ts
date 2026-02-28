@@ -5,7 +5,7 @@ import express from 'express';
 import cors from 'cors';
 import * as path from 'path';
 import { initEmailTransport } from './services/email-transport';
-import { pollStaleLeads, pollLostDeals, pollSatisfactionEmails } from './services/lifecycle-poller';
+import { pollStaleLeads, pollLostDeals, pollSatisfactionEmails, pollMarketResearch, pollContentCreation } from './services/lifecycle-poller';
 import leadsRoutes from './routes/leads.routes';
 import dealsRoutes from './routes/deals.routes';
 import tasksRoutes from './routes/tasks.routes';
@@ -15,6 +15,8 @@ import emailsRoutes from './routes/emails.routes';
 import invoicesRoutes from './routes/invoices.routes';
 import settingsRoutes from './routes/settings.routes';
 import { AppSettingsDB } from './database/db';
+import researchRoutes from './routes/research.routes';
+import contentRoutes from './routes/content.routes';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -38,6 +40,8 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/company', companyRoutes);
 app.use('/api/invoices', invoicesRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/research', researchRoutes);
+app.use('/api/content', contentRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -116,7 +120,7 @@ app.listen(PORT, () => {
 ║  🎯 Marketing  💼 Sales  ⚖️  Legal               ║
 ║  📊 Accounting  📧 Email                         ║
 ║                                                  ║
-║  📡 Auto-polling: replies/stale/lost/satisfaction ║
+║  📡 Auto-polling: replies/stale/lost/research     ║
 ╚══════════════════════════════════════════════════╝
   `);
 
@@ -129,10 +133,15 @@ app.listen(PORT, () => {
     setInterval(pollStaleLeads, 6 * 3_600_000);      // every 6 hours
     setInterval(pollLostDeals, 24 * 3_600_000);      // every 24 hours
     setInterval(pollSatisfactionEmails, 24 * 3_600_000); // every 24 hours
+    setInterval(pollMarketResearch, 24 * 3_600_000);     // every 24 hours
+    setInterval(pollContentCreation, 24 * 3_600_000);    // every 24 hours
     // Run lifecycle pollers once immediately on startup
     pollStaleLeads();
     pollLostDeals();
     pollSatisfactionEmails();
+    pollMarketResearch();
+    // Delay content creation to give research time to complete
+    setTimeout(pollContentCreation, 5 * 60_000);
   }, 5_000);
 });
 

@@ -16,7 +16,7 @@
             <span class="font-medium text-marketing">Marketing Agent</span>
             <StatusBadge :status="getAgentStatus('marketing')" />
           </div>
-          <p class="text-xs text-gray-500">Lead enrichment & scoring</p>
+          <p class="text-xs text-gray-500">Leads, research & content</p>
         </div>
       </div>
 

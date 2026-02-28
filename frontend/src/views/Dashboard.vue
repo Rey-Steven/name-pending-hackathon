@@ -3,7 +3,7 @@
     <h1 class="text-3xl font-bold text-gray-900 mb-8">Dashboard</h1>
 
     <!-- Stats Cards -->
-    <div class="grid grid-cols-5 gap-4 mb-8" v-if="store.stats">
+    <div class="grid grid-cols-7 gap-4 mb-8" v-if="store.stats">
       <div class="bg-white rounded-lg shadow p-4 border-l-4 border-marketing">
         <p class="text-sm text-gray-500">Leads</p>
         <p class="text-2xl font-bold">{{ store.stats.leads.total }}</p>
@@ -23,6 +23,14 @@
       <div class="bg-white rounded-lg shadow p-4 border-l-4 border-email">
         <p class="text-sm text-gray-500">Emails Sent</p>
         <p class="text-2xl font-bold">{{ store.stats.emails.sent }}</p>
+      </div>
+      <div class="bg-white rounded-lg shadow p-4 border-l-4 border-purple-500">
+        <p class="text-sm text-gray-500">Research</p>
+        <p class="text-2xl font-bold">{{ store.stats.research?.completed || 0 }}</p>
+      </div>
+      <div class="bg-white rounded-lg shadow p-4 border-l-4 border-pink-500">
+        <p class="text-sm text-gray-500">Content</p>
+        <p class="text-2xl font-bold">{{ store.stats.content?.drafts || 0 }}</p>
       </div>
     </div>
 

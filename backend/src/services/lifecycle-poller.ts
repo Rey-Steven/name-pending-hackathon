@@ -1,6 +1,7 @@
-import { DealDB, LeadDB, EmailDB, AppSettingsDB } from '../database/db';
+import { DealDB, LeadDB, EmailDB, AppSettingsDB, MarketResearchDB, SocialContentDB } from '../database/db';
 import { CompanyProfileDB } from '../database/db';
 import { EmailAgent } from '../agents/email-agent';
+import { CompanyProfileContext } from '../types';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -202,5 +203,101 @@ export async function pollSatisfactionEmails(): Promise<void> {
     console.error('pollSatisfactionEmails error:', err.message);
   } finally {
     pollingSatisfaction = false;
+  }
+}
+
+// ─── Daily Market Research ───────────────────────────────────
+
+function buildProfileContext(profile: any): CompanyProfileContext {
+  const agentContexts = JSON.parse(profile.agent_context_json || '{}');
+  return {
+    id: profile.id!,
+    name: profile.name,
+    website: profile.website,
+    industry: profile.industry,
+    description: profile.description,
+    business_model: profile.business_model,
+    target_customers: profile.target_customers,
+    products_services: profile.products_services,
+    geographic_focus: profile.geographic_focus,
+    agentContexts,
+    pricing_model: profile.pricing_model,
+    min_deal_value: profile.min_deal_value,
+    max_deal_value: profile.max_deal_value,
+    key_products: profile.key_products,
+    unique_selling_points: profile.unique_selling_points,
+    communication_language: profile.communication_language,
+  };
+}
+
+let pollingResearch = false;
+
+export async function pollMarketResearch(): Promise<void> {
+  if (pollingResearch) return;
+  pollingResearch = true;
+
+  try {
+    const profile = await CompanyProfileDB.get();
+    if (!profile) return;
+
+    const companyId = await CompanyProfileDB.getActiveId();
+    if (!companyId) return;
+
+    // Check if research already ran today
+    const latest = await MarketResearchDB.getLatest(companyId);
+    if (latest && latest.created_at) {
+      const hoursAgo = (Date.now() - new Date(latest.created_at).getTime()) / (1000 * 60 * 60);
+      if (hoursAgo < 22) return;
+    }
+
+    console.log('\n📊 Daily market research: starting scheduled run');
+
+    const { MarketingAgent } = await import('../agents/marketing-agent');
+    const agent = new MarketingAgent(buildProfileContext(profile));
+    const researchId = await agent.runMarketResearch('schedule');
+    console.log(`  ✅ Scheduled research completed: ${researchId}`);
+  } catch (err: any) {
+    console.error('pollMarketResearch error:', err.message);
+  } finally {
+    pollingResearch = false;
+  }
+}
+
+// ─── Daily Content Creation ──────────────────────────────────
+
+let pollingContent = false;
+
+export async function pollContentCreation(): Promise<void> {
+  if (pollingContent) return;
+  pollingContent = true;
+
+  try {
+    const profile = await CompanyProfileDB.get();
+    if (!profile) return;
+
+    const companyId = await CompanyProfileDB.getActiveId();
+    if (!companyId) return;
+
+    // Only run if fresh research exists (completed today)
+    const latestResearch = await MarketResearchDB.getLatest(companyId);
+    if (!latestResearch || !latestResearch.created_at) return;
+
+    const researchAge = (Date.now() - new Date(latestResearch.created_at).getTime()) / (1000 * 60 * 60);
+    if (researchAge > 24) return;
+
+    // Check if content was already created for this research
+    const existingContent = await SocialContentDB.findByResearch(latestResearch.id!);
+    if (existingContent.length > 0) return;
+
+    console.log('\n✍️  Daily content creation: starting scheduled run');
+
+    const { MarketingAgent } = await import('../agents/marketing-agent');
+    const agent = new MarketingAgent(buildProfileContext(profile));
+    const contentIds = await agent.createSocialContent(latestResearch.id, 'schedule');
+    console.log(`  ✅ Scheduled content created: ${contentIds.join(', ')}`);
+  } catch (err: any) {
+    console.error('pollContentCreation error:', err.message);
+  } finally {
+    pollingContent = false;
   }
 }

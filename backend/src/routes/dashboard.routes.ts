@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { LeadDB, DealDB, TaskDB, InvoiceDB, EmailDB, AuditLog, CompanyProfileDB } from '../database/db';
+import { LeadDB, DealDB, TaskDB, InvoiceDB, EmailDB, AuditLog, CompanyProfileDB, MarketResearchDB, SocialContentDB } from '../database/db';
 import { SSEEvent } from '../types';
 
 const router = Router();
@@ -12,12 +12,14 @@ router.get('/stats', async (_req: Request, res: Response) => {
   try {
     const companyId = await CompanyProfileDB.getActiveId();
     if (!companyId) return res.status(400).json({ error: 'No active company' });
-    const [leads, deals, tasks, invoices, emails] = await Promise.all([
+    const [leads, deals, tasks, invoices, emails, research, content] = await Promise.all([
       LeadDB.all(companyId),
       DealDB.all(companyId),
       TaskDB.all(companyId),
       InvoiceDB.all(companyId),
       EmailDB.all(companyId),
+      MarketResearchDB.all(companyId),
+      SocialContentDB.all(companyId),
     ]);
 
     const openDeals = deals.filter(d => ['lead_contacted', 'in_pipeline', 'offer_sent'].includes(d.status ?? ''));
@@ -62,6 +64,17 @@ router.get('/stats', async (_req: Request, res: Response) => {
       emails: {
         total: emails.length,
         sent: emails.filter(e => e.status === 'sent').length,
+      },
+      research: {
+        total: research.length,
+        completed: research.filter(r => r.status === 'completed').length,
+        latestDate: research[0]?.created_at || null,
+      },
+      content: {
+        total: content.length,
+        drafts: content.filter(c => c.status === 'draft').length,
+        approved: content.filter(c => c.status === 'approved').length,
+        posted: content.filter(c => c.status === 'posted').length,
       },
     });
   } catch (error: any) {

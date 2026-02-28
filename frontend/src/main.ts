@@ -16,6 +16,9 @@ import TasksList from './views/TasksList.vue'
 import InvoicesList from './views/InvoicesList.vue'
 import EmailsView from './views/EmailsView.vue'
 import Settings from './views/Settings.vue'
+import MarketResearchView from './views/MarketResearchView.vue'
+import SocialContentView from './views/SocialContentView.vue'
+import LegalContracts from './views/LegalContracts.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -32,6 +35,9 @@ const router = createRouter({
     { path: '/tasks', component: TasksList },
     { path: '/invoices', component: InvoicesList },
     { path: '/emails', component: EmailsView },
+    { path: '/research', component: MarketResearchView },
+    { path: '/content', component: SocialContentView },
+    { path: '/legal/contracts', component: LegalContracts },
   ],
 })
 
