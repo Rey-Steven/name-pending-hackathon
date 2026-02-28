@@ -233,6 +233,8 @@ export class WorkflowEngine {
         dealId,
         recipientName: lead.contact_name,
         emailType: 'follow_up',
+        inReplyTo: reply.messageId,
+        references: reply.references ? `${reply.references} ${reply.messageId}` : reply.messageId,
       });
 
       broadcastEvent({
@@ -268,6 +270,8 @@ export class WorkflowEngine {
         dealId,
         recipientName: lead.contact_name,
         emailType: 'proposal',
+        inReplyTo: reply.messageId,
+        references: reply.references ? `${reply.references} ${reply.messageId}` : reply.messageId,
       });
 
       const label = action === 'wants_offer' ? 'Offer sent' : action === 'counter' ? 'Counter-offer sent' : 'New offer sent';
@@ -297,6 +301,8 @@ export class WorkflowEngine {
         dealId,
         recipientName: lead.contact_name,
         emailType: 'confirmation',
+        inReplyTo: reply.messageId,
+        references: reply.references ? `${reply.references} ${reply.messageId}` : reply.messageId,
       });
 
       const completionResult = await this.completeWorkflow(dealId, deal.lead_id, deal);
@@ -328,6 +334,8 @@ export class WorkflowEngine {
       dealId,
       recipientName: lead.contact_name,
       emailType: 'follow_up',
+      inReplyTo: reply.messageId,
+      references: reply.references ? `${reply.references} ${reply.messageId}` : reply.messageId,
     });
 
     AuditLog.log('sales', 'deal_closed_lost', 'deal', dealId, {
