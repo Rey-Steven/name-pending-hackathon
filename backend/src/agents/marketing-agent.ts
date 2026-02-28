@@ -39,7 +39,6 @@ Company Name: ${lead.company_name}
 Contact Person: ${lead.contact_name}
 Email: ${lead.contact_email || 'Not provided'}
 Phone: ${lead.contact_phone || 'Not provided'}
-Product Interest: ${lead.product_interest || 'General inquiry'}
 Website: ${lead.company_website || 'Not provided'}
 
 Provide your analysis and lead score.`;

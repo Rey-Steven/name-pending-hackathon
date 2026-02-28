@@ -36,7 +36,6 @@ export interface Lead {
   contact_name: string;
   contact_email?: string;
   contact_phone?: string;
-  product_interest?: string;
   company_website?: string;
   industry?: string;
   company_size?: string;
@@ -131,16 +130,15 @@ export const LeadDB = {
   create: (lead: Lead) => {
     const stmt = db.prepare(`
       INSERT INTO leads (company_name, contact_name, contact_email, contact_phone,
-                         product_interest, company_website, industry, company_size,
+                         company_website, industry, company_size,
                          annual_revenue, lead_score, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       lead.company_name,
       lead.contact_name,
       lead.contact_email || null,
       lead.contact_phone || null,
-      lead.product_interest || null,
       lead.company_website || null,
       lead.industry || null,
       lead.company_size || null,

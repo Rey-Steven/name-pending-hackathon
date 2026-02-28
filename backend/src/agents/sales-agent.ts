@@ -56,7 +56,6 @@ ALWAYS respond with valid JSON in this exact format:
 LEAD INFORMATION:
 - Company: ${lead.company_name}
 - Contact: ${lead.contact_name} (${lead.contact_email || 'no email'})
-- Product Interest: ${lead.product_interest || 'General inquiry'}
 - Website: ${lead.company_website || 'N/A'}
 
 MARKETING ANALYSIS:

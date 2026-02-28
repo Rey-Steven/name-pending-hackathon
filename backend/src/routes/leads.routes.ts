@@ -30,7 +30,7 @@ router.get('/:id', (req: Request, res: Response) => {
 // POST /api/leads - Create new lead
 router.post('/', (req: Request<{}, {}, CreateLeadRequest>, res: Response) => {
   try {
-    const { companyName, contactName, contactEmail, contactPhone, productInterest, companyWebsite } = req.body;
+    const { companyName, contactName, contactEmail, contactPhone, companyWebsite } = req.body;
 
     if (!companyName || !contactName) {
       return res.status(400).json({ error: 'companyName and contactName are required' });
@@ -41,7 +41,6 @@ router.post('/', (req: Request<{}, {}, CreateLeadRequest>, res: Response) => {
       contact_name: contactName,
       contact_email: contactEmail,
       contact_phone: contactPhone,
-      product_interest: productInterest,
       company_website: companyWebsite,
     });
 

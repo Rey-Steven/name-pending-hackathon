@@ -5,7 +5,6 @@ CREATE TABLE IF NOT EXISTS leads (
   contact_name TEXT NOT NULL,
   contact_email TEXT,
   contact_phone TEXT,
-  product_interest TEXT,
   company_website TEXT,
   -- Enriched data from Marketing Agent
   industry TEXT,
