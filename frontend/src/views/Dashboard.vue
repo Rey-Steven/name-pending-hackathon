@@ -77,52 +77,54 @@
       <div class="p-4 border-b">
         <h2 class="text-lg font-semibold">Recent Leads</h2>
       </div>
-      <table class="w-full" v-if="store.leads.length">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Company</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Contact</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Score</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y">
-          <tr v-for="lead in store.leads" :key="lead.id" class="hover:bg-gray-50">
-            <td class="px-4 py-3 font-medium">{{ lead.company_name }}</td>
-            <td class="px-4 py-3 text-gray-600">{{ lead.contact_name }}</td>
-            <td class="px-4 py-3">
-              <span
-                v-if="lead.lead_score"
-                :class="{
-                  'bg-green-100 text-green-800': lead.lead_score === 'A',
-                  'bg-yellow-100 text-yellow-800': lead.lead_score === 'B',
-                  'bg-red-100 text-red-800': lead.lead_score === 'C',
-                }"
-                class="px-2 py-1 rounded text-xs font-medium"
-              >
-                {{ lead.lead_score }}
-              </span>
-              <span v-else class="text-gray-400">-</span>
-            </td>
-            <td class="px-4 py-3">
-              <span class="px-2 py-1 rounded text-xs font-medium bg-gray-100">
-                {{ lead.status }}
-              </span>
-            </td>
-            <td class="px-4 py-3">
-              <button
-                v-if="lead.status === 'new'"
-                @click="startWorkflow(lead.id)"
-                :disabled="store.isWorkflowRunning"
-                class="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50"
-              >
-                Run Agents
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div v-if="store.leads.length" class="overflow-x-auto">
+        <table class="w-full min-w-full">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Company</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Contact</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Score</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y">
+            <tr v-for="lead in store.leads" :key="lead.id" class="hover:bg-gray-50">
+              <td class="px-4 py-3 font-medium">{{ lead.company_name }}</td>
+              <td class="px-4 py-3 text-gray-600">{{ lead.contact_name }}</td>
+              <td class="px-4 py-3">
+                <span
+                  v-if="lead.lead_score"
+                  :class="{
+                    'bg-green-100 text-green-800': lead.lead_score === 'A',
+                    'bg-yellow-100 text-yellow-800': lead.lead_score === 'B',
+                    'bg-red-100 text-red-800': lead.lead_score === 'C',
+                  }"
+                  class="px-2 py-1 rounded text-xs font-medium"
+                >
+                  {{ lead.lead_score }}
+                </span>
+                <span v-else class="text-gray-400">-</span>
+              </td>
+              <td class="px-4 py-3">
+                <span class="px-2 py-1 rounded text-xs font-medium bg-gray-100">
+                  {{ lead.status }}
+                </span>
+              </td>
+              <td class="px-4 py-3">
+                <button
+                  v-if="lead.status === 'new'"
+                  @click="startWorkflow(lead.id)"
+                  :disabled="store.isWorkflowRunning"
+                  class="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Run Agents
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <p v-else class="p-8 text-center text-gray-400">
         No leads yet.
         <router-link to="/leads/new" class="text-blue-600 hover:underline">Create one</router-link>

@@ -29,8 +29,8 @@
 
     <!-- Table -->
     <div v-if="loading" class="text-center py-12 text-gray-400">Loading tasks...</div>
-    <div v-else-if="filteredTasks.length" class="bg-white rounded-lg shadow overflow-hidden">
-      <table class="w-full">
+    <div v-else-if="filteredTasks.length" class="bg-white rounded-lg shadow overflow-x-auto">
+      <table class="w-full min-w-full">
         <thead class="bg-gray-50">
           <tr>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
