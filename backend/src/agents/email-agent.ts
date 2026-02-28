@@ -435,7 +435,7 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
   }>> {
     console.log('\n  📥 Checking inbox for new replies...');
 
-    const replies = await fetchReplies();
+    const replies = await fetchReplies(this.companyProfile?.id || '');
     const results: Array<{
       from: string;
       subject: string;
@@ -514,7 +514,7 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
   }
 
   async getReplies(): Promise<Array<InboxEmail & { matchedEmailId?: string; matchedDealId?: string | null }>> {
-    return fetchReplies();
+    return fetchReplies(this.companyProfile?.id || '');
   }
 
   async getRepliesForDeal(dealId: string): Promise<InboxEmail | null> {

@@ -280,11 +280,11 @@ export const DealDB = {
       .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
   },
 
-  findByStatus: async (statuses: string[]): Promise<Deal[]> => {
+  findByStatus: async (statuses: string[], companyId: string): Promise<Deal[]> => {
     const snap = await fdb().collection('deals')
-      .where('status', 'in', statuses)
+      .where('company_id', '==', companyId)
       .get();
-    return snapToDocs<Deal>(snap);
+    return snapToDocs<Deal>(snap).filter(d => statuses.includes(d.status || ''));
   },
 };
 
@@ -475,10 +475,10 @@ export const EmailDB = {
   },
 
   // Used by email-transport.ts to match inbox replies to our sent emails
-  findSent: async (): Promise<Array<{ id: string; deal_id: string | null; recipient_email: string; subject: string }>> => {
-    const snap = await fdb().collection('emails').where('status', '==', 'sent').get();
+  findSent: async (companyId: string): Promise<Array<{ id: string; deal_id: string | null; recipient_email: string; subject: string }>> => {
+    const snap = await fdb().collection('emails').where('company_id', '==', companyId).get();
     return snap.docs
-      .filter(d => !d.data().deleted_at)
+      .filter(d => !d.data().deleted_at && d.data().status === 'sent')
       .map(d => ({
         id: d.id,
         deal_id: (d.data().deal_id as string | null) || null,
@@ -795,6 +795,11 @@ export const CompanyProfileDB = {
     const snap = await fdb().collection('company_profiles').get();
     return snapToDocs<CompanyProfile>(snap)
       .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  },
+
+  getById: async (id: string): Promise<CompanyProfile | undefined> => {
+    const doc = await fdb().collection('company_profiles').doc(id).get();
+    return docToObj<CompanyProfile>(doc);
   },
 
   getActiveId: async (): Promise<string | null> => {

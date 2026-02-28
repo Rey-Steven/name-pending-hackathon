@@ -10,24 +10,8 @@ function daysSince(isoDate: string): number {
   return ms / (1000 * 60 * 60 * 24);
 }
 
-async function getEmailAgent(): Promise<EmailAgent> {
-  const profile = await CompanyProfileDB.get();
-  if (!profile) return new EmailAgent(null);
-  const agentContexts = JSON.parse(profile.agent_context_json || '{}');
-  return new EmailAgent({
-    id: 'main',
-    name: profile.name,
-    website: profile.website,
-    logo_path: profile.logo_path,
-    industry: profile.industry,
-    description: profile.description,
-    business_model: profile.business_model,
-    target_customers: profile.target_customers,
-    products_services: profile.products_services,
-    geographic_focus: profile.geographic_focus,
-    agentContexts,
-    kad_codes: profile.kad_codes,
-  });
+function buildEmailAgent(profile: any): EmailAgent {
+  return new EmailAgent(buildProfileContext(profile));
 }
 
 // ─── Stale Lead Follow-up ─────────────────────────────────────
@@ -41,53 +25,57 @@ export async function pollStaleLeads(): Promise<void> {
 
   try {
     const { stale_lead_days, max_followup_attempts } = await AppSettingsDB.get();
-    // Include both new ('offer_sent') and legacy ('proposal_sent') statuses
-    const deals = await DealDB.findByStatus(['offer_sent', 'proposal_sent']);
-    const stale = deals.filter(d => {
-      const updatedAt = d.updated_at || d.created_at || '';
-      return updatedAt && daysSince(updatedAt) >= stale_lead_days && (d.follow_up_count ?? 0) < max_followup_attempts;
-    });
+    const companies = await CompanyProfileDB.getAll();
 
-    if (stale.length === 0) return;
-    console.log(`\n📬 Stale leads: ${stale.length} deal(s) need follow-up`);
+    for (const company of companies) {
+      // Include both new ('offer_sent') and legacy ('proposal_sent') statuses
+      const deals = await DealDB.findByStatus(['offer_sent', 'proposal_sent'], company.id!);
+      const stale = deals.filter(d => {
+        const updatedAt = d.updated_at || d.created_at || '';
+        return updatedAt && daysSince(updatedAt) >= stale_lead_days && (d.follow_up_count ?? 0) < max_followup_attempts;
+      });
 
-    const emailAgent = await getEmailAgent();
+      if (stale.length === 0) continue;
+      console.log(`\n📬 Stale leads [${company.name}]: ${stale.length} deal(s) need follow-up`);
 
-    for (const deal of stale) {
-      try {
-        const lead = await LeadDB.findById(deal.lead_id);
-        if (!lead || !lead.contact_email) {
-          console.warn(`  ⚠️  Deal #${deal.id}: no lead/email — skipping`);
-          continue;
+      const emailAgent = buildEmailAgent(company);
+
+      for (const deal of stale) {
+        try {
+          const lead = await LeadDB.findById(deal.lead_id);
+          if (!lead || !lead.contact_email) {
+            console.warn(`  ⚠️  Deal #${deal.id}: no lead/email — skipping`);
+            continue;
+          }
+
+          const followUpCount = deal.follow_up_count ?? 0;
+
+          // Look up the last email in this deal's thread for proper Gmail threading
+          const dealEmails = await EmailDB.findByDeal(deal.id!);
+          const lastEmail = dealEmails.length > 0 ? dealEmails[dealEmails.length - 1] : undefined;
+          const threadWith = lastEmail?.message_id ? { messageId: lastEmail.message_id, subject: lastEmail.subject } : undefined;
+
+          await emailAgent.sendEmail(deal.lead_id, 'follow_up', {
+            dealId: deal.id,
+            salesResult: {
+              productName: deal.product_name,
+              totalAmount: deal.total_amount,
+              followUpCount,
+              daysSinceProposal: Math.floor(daysSince(deal.updated_at || deal.created_at || '')),
+            },
+            threadWith,
+          });
+
+          const newCount = followUpCount + 1;
+          await DealDB.update(deal.id!, {
+            follow_up_count: newCount,
+            ...(newCount >= max_followup_attempts ? { status: 'no_response' } : {}),
+          });
+
+          console.log(`  ✅ Deal #${deal.id}: follow-up #${newCount} sent${newCount >= max_followup_attempts ? ' → marked no_response' : ''}`);
+        } catch (err: any) {
+          console.error(`  ❌ Deal #${deal.id} follow-up error:`, err.message);
         }
-
-        const followUpCount = deal.follow_up_count ?? 0;
-
-        // Look up the last email in this deal's thread for proper Gmail threading
-        const dealEmails = await EmailDB.findByDeal(deal.id!);
-        const lastEmail = dealEmails.length > 0 ? dealEmails[dealEmails.length - 1] : undefined;
-        const threadWith = lastEmail?.message_id ? { messageId: lastEmail.message_id, subject: lastEmail.subject } : undefined;
-
-        await emailAgent.sendEmail(deal.lead_id, 'follow_up', {
-          dealId: deal.id,
-          salesResult: {
-            productName: deal.product_name,
-            totalAmount: deal.total_amount,
-            followUpCount,
-            daysSinceProposal: Math.floor(daysSince(deal.updated_at || deal.created_at || '')),
-          },
-          threadWith,
-        });
-
-        const newCount = followUpCount + 1;
-        await DealDB.update(deal.id!, {
-          follow_up_count: newCount,
-          ...(newCount >= max_followup_attempts ? { status: 'no_response' } : {}),
-        });
-
-        console.log(`  ✅ Deal #${deal.id}: follow-up #${newCount} sent${newCount >= max_followup_attempts ? ' → marked no_response' : ''}`);
-      } catch (err: any) {
-        console.error(`  ❌ Deal #${deal.id} follow-up error:`, err.message);
       }
     }
   } catch (err: any) {
@@ -108,50 +96,54 @@ export async function pollLostDeals(): Promise<void> {
 
   try {
     const { lost_deal_reopen_days } = await AppSettingsDB.get();
-    // Include both new ('closed_lost') and legacy ('failed', 'no_response') statuses
-    const deals = await DealDB.findByStatus(['closed_lost', 'failed', 'no_response']);
-    const toReopen = deals.filter(d => {
-      const updatedAt = d.updated_at || d.created_at || '';
-      return updatedAt && daysSince(updatedAt) >= lost_deal_reopen_days;
-    });
-
-    if (toReopen.length === 0) return;
-    console.log(`\n🔄 Lost deals: ${toReopen.length} deal(s) eligible for reopening`);
+    const companies = await CompanyProfileDB.getAll();
 
     const { WorkflowEngine } = await import('./workflow-engine');
 
-    for (const deal of toReopen) {
-      try {
-        const lead = await LeadDB.findById(deal.lead_id);
-        if (!lead) {
-          console.warn(`  ⚠️  Deal #${deal.id}: original lead not found — skipping`);
-          continue;
+    for (const company of companies) {
+      // Include both new ('closed_lost') and legacy ('failed', 'no_response') statuses
+      const deals = await DealDB.findByStatus(['closed_lost', 'failed', 'no_response'], company.id!);
+      const toReopen = deals.filter(d => {
+        const updatedAt = d.updated_at || d.created_at || '';
+        return updatedAt && daysSince(updatedAt) >= lost_deal_reopen_days;
+      });
+
+      if (toReopen.length === 0) continue;
+      console.log(`\n🔄 Lost deals [${company.name}]: ${toReopen.length} deal(s) eligible for reopening`);
+
+      for (const deal of toReopen) {
+        try {
+          const lead = await LeadDB.findById(deal.lead_id);
+          if (!lead) {
+            console.warn(`  ⚠️  Deal #${deal.id}: original lead not found — skipping`);
+            continue;
+          }
+
+          // Mark old deal as reopened so we don't process it again
+          await DealDB.update(deal.id!, { status: 'reopened' });
+
+          // Create a fresh lead with the same company/contact info
+          const newLeadId = await LeadDB.create({
+            company_id: lead.company_id,
+            company_name: lead.company_name,
+            contact_name: lead.contact_name,
+            contact_email: lead.contact_email,
+            contact_phone: lead.contact_phone,
+            product_interest: lead.product_interest,
+            company_website: lead.company_website,
+            status: 'new',
+          });
+
+          // Restart the full workflow for the new lead
+          const engine = new WorkflowEngine();
+          engine.startWorkflow(newLeadId).catch((err: Error) => {
+            console.error(`  ❌ Workflow error for reopened lead #${newLeadId}:`, err.message);
+          });
+
+          console.log(`  ✅ Deal #${deal.id} reopened → new lead #${newLeadId} created`);
+        } catch (err: any) {
+          console.error(`  ❌ Deal #${deal.id} reopen error:`, err.message);
         }
-
-        // Mark old deal as reopened so we don't process it again
-        await DealDB.update(deal.id!, { status: 'reopened' });
-
-        // Create a fresh lead with the same company/contact info
-        const newLeadId = await LeadDB.create({
-          company_id: lead.company_id,
-          company_name: lead.company_name,
-          contact_name: lead.contact_name,
-          contact_email: lead.contact_email,
-          contact_phone: lead.contact_phone,
-          product_interest: lead.product_interest,
-          company_website: lead.company_website,
-          status: 'new',
-        });
-
-        // Restart the full workflow for the new lead
-        const engine = new WorkflowEngine();
-        engine.startWorkflow(newLeadId).catch((err: Error) => {
-          console.error(`  ❌ Workflow error for reopened lead #${newLeadId}:`, err.message);
-        });
-
-        console.log(`  ✅ Deal #${deal.id} reopened → new lead #${newLeadId} created`);
-      } catch (err: any) {
-        console.error(`  ❌ Deal #${deal.id} reopen error:`, err.message);
       }
     }
   } catch (err: any) {
@@ -172,31 +164,35 @@ export async function pollSatisfactionEmails(): Promise<void> {
 
   try {
     const { satisfaction_email_days } = await AppSettingsDB.get();
-    // Include both new ('closed_won') and legacy ('completed') statuses
-    const deals = await DealDB.findByStatus(['closed_won', 'completed']);
-    const toNotify = deals.filter(d => {
-      if (d.satisfaction_sent) return false;
-      const updatedAt = d.updated_at || d.created_at || '';
-      const age = daysSince(updatedAt);
-      return age >= satisfaction_email_days && age < satisfaction_email_days + 1;
-    });
+    const companies = await CompanyProfileDB.getAll();
 
-    if (toNotify.length === 0) return;
-    console.log(`\n😊 Satisfaction emails: ${toNotify.length} deal(s) ready`);
+    for (const company of companies) {
+      // Include both new ('closed_won') and legacy ('completed') statuses
+      const deals = await DealDB.findByStatus(['closed_won', 'completed'], company.id!);
+      const toNotify = deals.filter(d => {
+        if (d.satisfaction_sent) return false;
+        const updatedAt = d.updated_at || d.created_at || '';
+        const age = daysSince(updatedAt);
+        return age >= satisfaction_email_days && age < satisfaction_email_days + 1;
+      });
 
-    const emailAgent = await getEmailAgent();
+      if (toNotify.length === 0) continue;
+      console.log(`\n😊 Satisfaction emails [${company.name}]: ${toNotify.length} deal(s) ready`);
 
-    for (const deal of toNotify) {
-      try {
-        await emailAgent.sendEmail(deal.lead_id, 'satisfaction', {
-          dealId: deal.id,
-          salesResult: { productName: deal.product_name },
-        });
+      const emailAgent = buildEmailAgent(company);
 
-        await DealDB.update(deal.id!, { satisfaction_sent: true });
-        console.log(`  ✅ Deal #${deal.id}: satisfaction email sent`);
-      } catch (err: any) {
-        console.error(`  ❌ Deal #${deal.id} satisfaction error:`, err.message);
+      for (const deal of toNotify) {
+        try {
+          await emailAgent.sendEmail(deal.lead_id, 'satisfaction', {
+            dealId: deal.id,
+            salesResult: { productName: deal.product_name },
+          });
+
+          await DealDB.update(deal.id!, { satisfaction_sent: true });
+          console.log(`  ✅ Deal #${deal.id}: satisfaction email sent`);
+        } catch (err: any) {
+          console.error(`  ❌ Deal #${deal.id} satisfaction error:`, err.message);
+        }
       }
     }
   } catch (err: any) {

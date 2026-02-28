@@ -238,11 +238,11 @@ export async function fetchUnread(): Promise<InboxEmail[]> {
 }
 
 // Match inbox replies to our sent emails
-export async function fetchReplies(): Promise<Array<InboxEmail & { matchedEmailId?: string; matchedDealId?: string | null }>> {
+export async function fetchReplies(companyId: string): Promise<Array<InboxEmail & { matchedEmailId?: string; matchedDealId?: string | null }>> {
   const inbox = await fetchInbox(50);
 
-  // Get all sent emails from our database
-  const sentEmails = await EmailDB.findSent();
+  // Get sent emails scoped to this company
+  const sentEmails = await EmailDB.findSent(companyId);
 
   const gmailUser = process.env.GMAIL_USER || '';
 

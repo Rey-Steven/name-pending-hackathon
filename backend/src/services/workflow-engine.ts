@@ -9,8 +9,8 @@ import { generateOfferPDF } from './pdf-generator';
 import { broadcastEvent } from '../routes/dashboard.routes';
 import { CompanyProfileContext } from '../types';
 
-async function loadCompanyProfile(): Promise<CompanyProfileContext | null> {
-  const raw = await CompanyProfileDB.get();
+async function loadCompanyProfile(companyId: string): Promise<CompanyProfileContext | null> {
+  const raw = await CompanyProfileDB.getById(companyId);
   if (!raw) return null;
   try {
     const agentContexts = JSON.parse(raw.agent_context_json || '{}');
@@ -46,8 +46,8 @@ const REPLY_AWAITING_STATUSES = ['lead_contacted', 'in_pipeline', 'offer_sent', 
 
 export class WorkflowEngine {
 
-  private async createAgents() {
-    const companyProfile = await loadCompanyProfile();
+  private async createAgents(companyId: string) {
+    const companyProfile = await loadCompanyProfile(companyId);
     return {
       companyProfile,
       marketingAgent: new MarketingAgent(companyProfile),
@@ -63,7 +63,10 @@ export class WorkflowEngine {
   async startWorkflow(leadId: string) {
     const startTime = Date.now();
 
-    const { companyProfile, marketingAgent, salesAgent, emailAgent } = await this.createAgents();
+    const bootstrapLead = await LeadDB.findById(leadId);
+    if (!bootstrapLead?.company_id) throw new Error(`Lead ${leadId} has no company_id`);
+
+    const { companyProfile, marketingAgent, salesAgent, emailAgent } = await this.createAgents(bootstrapLead.company_id);
 
     console.log('\n' + '═'.repeat(60));
     console.log('  🚀 WORKFLOW — Lead to Cold Outreach');
@@ -191,7 +194,8 @@ export class WorkflowEngine {
     const lead = await LeadDB.findById(deal.lead_id);
     if (!lead) throw new Error(`Lead ${deal.lead_id} not found`);
 
-    const { salesAgent, emailAgent } = await this.createAgents();
+    if (!deal.company_id) throw new Error(`Deal ${dealId} has no company_id`);
+    const { salesAgent, emailAgent } = await this.createAgents(deal.company_id);
     const { max_offer_rounds: MAX_OFFER_ROUNDS } = await AppSettingsDB.get();
 
     // Normalize legacy statuses to new stage names for the agent
@@ -301,7 +305,7 @@ export class WorkflowEngine {
       const updatedDeal = await DealDB.findById(dealId);
       if (!updatedDeal) throw new Error(`Deal ${dealId} not found after update`);
 
-      const companyProfile = await CompanyProfileDB.get();
+      const companyProfile = await CompanyProfileDB.getById(deal.company_id!);
       if (!companyProfile) throw new Error('Company profile not configured — cannot generate offer PDF');
 
       const pdfBuffer = await generateOfferPDF({ deal: updatedDeal, lead: lead as Lead, companyProfile });
@@ -406,7 +410,7 @@ export class WorkflowEngine {
   private async completeWorkflow(dealId: string, leadId: string, deal: any) {
     console.log('\n📍 Running Legal → Accounting → Invoice pipeline');
 
-    const { companyProfile, legalAgent, accountingAgent, emailAgent } = await this.createAgents();
+    const { companyProfile, legalAgent, accountingAgent, emailAgent } = await this.createAgents(deal.company_id);
 
     const salesData = {
       productName: deal.product_name,
