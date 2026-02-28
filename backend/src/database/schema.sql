@@ -154,6 +154,26 @@ CREATE TABLE IF NOT EXISTS legal_validations (
   FOREIGN KEY (deal_id) REFERENCES deals(id)
 );
 
+-- Company profile (single-tenant: one row per installation)
+CREATE TABLE IF NOT EXISTS company_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  website TEXT,
+  logo_path TEXT,
+  industry TEXT,
+  description TEXT,
+  business_model TEXT,
+  target_customers TEXT,
+  products_services TEXT,
+  geographic_focus TEXT,
+  user_provided_text TEXT,
+  raw_scraped_data TEXT,
+  agent_context_json TEXT NOT NULL DEFAULT '{}',
+  setup_complete INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
 CREATE INDEX IF NOT EXISTS idx_deals_status ON deals(status);

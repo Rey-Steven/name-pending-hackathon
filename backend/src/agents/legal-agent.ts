@@ -1,27 +1,22 @@
 import { BaseAgent } from './base-agent';
-import { LegalResult } from '../types';
+import { LegalResult, CompanyProfileContext } from '../types';
 import { LeadDB, DealDB, LegalValidationDB } from '../database/db';
 
 export class LegalAgent extends BaseAgent {
-  constructor() {
-    super('legal', 'sonnet');
+  constructor(companyProfile: CompanyProfileContext | null = null) {
+    super('legal', 'sonnet', companyProfile);
   }
 
   getSystemPrompt(): string {
-    return `You are a Legal AI agent for a Greek B2B company. Your job is to review deals for legal compliance.
+    const companyHeader = this.buildCompanyContextHeader('legal');
+    return `${companyHeader}You are a Legal AI agent. Your job is to review deals for legal compliance.
 
 When reviewing a deal, you must check:
-1. AFM (ΑΦΜ) validity - Greek tax ID must be exactly 9 digits
-2. Company registry status - infer from company name suffix (ΑΕ, ΕΠΕ, ΙΚΕ, ΟΕ)
-3. GDPR compliance - ensure proper consent for data processing
-4. Contract terms - standard payment terms, delivery, liability
+1. Customer tax ID / company registry validity (based on jurisdiction)
+2. GDPR compliance - ensure proper consent for data processing
+3. Contract terms - payment terms, delivery, liability, warranties
+4. Industry-specific regulatory requirements
 5. Risk assessment - flag any concerns
-
-Greek business law context:
-- Valid company types: ΑΕ (Ανώνυμη Εταιρεία), ΕΠΕ (Εταιρεία Περιορισμένης Ευθύνης), ΙΚΕ, ΟΕ, ΕΕ
-- Standard FPA rate: 24%
-- Required invoice fields: AFM, DOY (tax office), company address
-- GDPR applies to all EU businesses
 
 ALWAYS respond with valid JSON in this exact format:
 {

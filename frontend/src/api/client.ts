@@ -37,6 +37,18 @@ export const workflowApi = {
   start: (leadId: number) => api.post('/workflow/start', { leadId }),
 }
 
+export const companyApi = {
+  getSetupStatus: () => api.get('/company/setup-status'),
+  getProfile: () => api.get('/company'),
+  setup: (formData: FormData) =>
+    axios.post('/api/company/setup', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  update: (data: { name?: string; website?: string; industry?: string }) =>
+    api.put('/company', data),
+  rescrape: () => api.post('/company/rescrape'),
+}
+
 // SSE connection for real-time events
 export function connectToEvents(onEvent: (event: any) => void): EventSource {
   const eventSource = new EventSource('/api/dashboard/events')

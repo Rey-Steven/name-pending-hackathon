@@ -1,19 +1,20 @@
 import { BaseAgent } from './base-agent';
-import { EmailResult } from '../types';
+import { EmailResult, CompanyProfileContext } from '../types';
 import { LeadDB, EmailDB } from '../database/db';
 import { sendRealEmail } from '../services/email-transport';
 
 export class EmailService extends BaseAgent {
-  constructor() {
-    super('email', 'haiku');
+  constructor(companyProfile: CompanyProfileContext | null = null) {
+    super('email', 'haiku', companyProfile);
   }
 
   getSystemPrompt(): string {
-    return `You are an Email Notifications AI agent for a Greek B2B company. Your job is to compose professional emails in Greek.
+    const companyHeader = this.buildCompanyContextHeader('email');
+    return `${companyHeader}You are an Email Notifications AI agent. Your job is to compose professional business emails.
 
 When composing an email, you must:
-1. Determine the appropriate tone (formal for new customers, warmer for existing)
-2. Write in Greek language
+1. Determine the appropriate tone based on the company's style and the customer relationship
+2. Write in the language appropriate for the company's geographic focus and customers
 3. Include all relevant business information
 4. Be professional and concise
 
@@ -23,12 +24,6 @@ Email types:
 - "invoice": Invoice delivery email
 - "follow_up": Follow-up message
 
-Greek business email conventions:
-- Start with: "Αξιότιμε/η κ." (Dear Mr./Ms.) for formal
-- End with: "Με εκτίμηση" (With respect) or "Σας ευχαριστούμε" (Thank you)
-- Include company name and contact details
-- Reference invoice numbers when applicable
-
 IMPORTANT: The recipientEmail MUST be the exact email from the RECIPIENT section below. Do not make up emails.
 
 ALWAYS respond with valid JSON in this exact format:
@@ -36,8 +31,8 @@ ALWAYS respond with valid JSON in this exact format:
   "reasoning": ["step 1", "step 2", "..."],
   "decision": "Email composed - type and recipient",
   "data": {
-    "subject": "email subject line in Greek",
-    "body": "full email body in Greek",
+    "subject": "email subject line",
+    "body": "full email body",
     "recipientEmail": "MUST use exact email from recipient info",
     "recipientName": "name",
     "emailType": "proposal" | "confirmation" | "invoice" | "follow_up"

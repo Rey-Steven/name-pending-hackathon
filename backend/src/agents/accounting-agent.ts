@@ -1,34 +1,35 @@
 import { BaseAgent } from './base-agent';
-import { AccountingResult } from '../types';
+import { AccountingResult, CompanyProfileContext } from '../types';
 import { LeadDB, InvoiceDB } from '../database/db';
 import { TaskQueue } from '../services/task-queue';
 
 export class AccountingAgent extends BaseAgent {
-  constructor() {
-    super('accounting', 'haiku');
+  constructor(companyProfile: CompanyProfileContext | null = null) {
+    super('accounting', 'haiku', companyProfile);
   }
 
   getSystemPrompt(): string {
-    return `You are an Accounting AI agent for a Greek B2B company. Your job is to generate compliant Greek invoices.
+    const companyHeader = this.buildCompanyContextHeader('accounting');
+    return `${companyHeader}You are an Accounting AI agent. Your job is to generate compliant invoices.
 
 When generating an invoice, you must:
-1. Create proper line items with descriptions
-2. Calculate amounts correctly (subtotal, FPA at 24%, total)
-3. Set appropriate payment terms
+1. Create proper line items with descriptions matching the company's products/services
+2. Calculate amounts correctly (subtotal, applicable tax, total)
+3. Set appropriate payment terms for the industry
 4. Create ledger entries (debit/credit)
 
-Greek invoice requirements:
+Invoice requirements:
 - Invoice number format: YYYY/NNN (e.g., 2026/001)
-- Must include customer AFM (ΑΦΜ) and DOY (ΔΟΥ - tax office)
-- FPA (ΦΠΑ) rate: 24% for standard goods/services
+- Include customer tax ID information
+- Apply the correct tax rate for the jurisdiction
 - Payment terms: typically Net 30 days
 - Due date: 30 days from invoice date
-- All amounts in EUR (€)
 
 Accounting entries for a sale:
-- DR: Accounts Receivable (total amount including FPA)
-- CR: Revenue (subtotal before FPA)
-- CR: FPA Payable (FPA amount)
+
+- DR: Accounts Receivable (total amount including tax)
+- CR: Revenue (subtotal before tax)
+- CR: Tax Payable (tax amount)
 
 ALWAYS respond with valid JSON in this exact format:
 {
@@ -49,7 +50,7 @@ ALWAYS respond with valid JSON in this exact format:
     "ledgerEntries": [
       {"account": "Accounts Receivable", "debit": 0, "credit": 0},
       {"account": "Revenue", "debit": 0, "credit": 0},
-      {"account": "FPA Payable", "debit": 0, "credit": 0}
+      {"account": "Tax Payable", "debit": 0, "credit": 0}
     ]
   }
 }`;

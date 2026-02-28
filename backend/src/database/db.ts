@@ -482,6 +482,76 @@ export const AuditLog = {
   }
 };
 
+export interface CompanyProfile {
+  id?: number;
+  name: string;
+  website?: string;
+  logo_path?: string;
+  industry?: string;
+  description?: string;
+  business_model?: string;
+  target_customers?: string;
+  products_services?: string;
+  geographic_focus?: string;
+  user_provided_text?: string;
+  raw_scraped_data?: string;
+  agent_context_json: string; // JSON: { marketing, sales, legal, accounting, email }
+  setup_complete?: number;
+}
+
+export const CompanyProfileDB = {
+  get: (): CompanyProfile | undefined => {
+    const stmt = db.prepare('SELECT * FROM company_profiles ORDER BY id DESC LIMIT 1');
+    return stmt.get() as CompanyProfile | undefined;
+  },
+
+  create: (profile: CompanyProfile): number => {
+    const stmt = db.prepare(`
+      INSERT INTO company_profiles (name, website, logo_path, industry, description,
+        business_model, target_customers, products_services, geographic_focus,
+        user_provided_text, raw_scraped_data, agent_context_json, setup_complete)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(
+      profile.name,
+      profile.website || null,
+      profile.logo_path || null,
+      profile.industry || null,
+      profile.description || null,
+      profile.business_model || null,
+      profile.target_customers || null,
+      profile.products_services || null,
+      profile.geographic_focus || null,
+      profile.user_provided_text || null,
+      profile.raw_scraped_data || null,
+      profile.agent_context_json,
+      profile.setup_complete ?? 1
+    );
+    return result.lastInsertRowid as number;
+  },
+
+  update: (id: number, updates: Partial<CompanyProfile>) => {
+    const fields = Object.keys(updates)
+      .filter(k => k !== 'id')
+      .map(k => `${k} = ?`);
+    const values = Object.keys(updates)
+      .filter(k => k !== 'id')
+      .map(k => (updates as any)[k]);
+
+    const stmt = db.prepare(`
+      UPDATE company_profiles
+      SET ${fields.join(', ')}, updated_at = datetime('now')
+      WHERE id = ?
+    `);
+    stmt.run(...values, id);
+  },
+
+  isSetupComplete: (): boolean => {
+    const stmt = db.prepare('SELECT setup_complete FROM company_profiles WHERE setup_complete = 1 LIMIT 1');
+    return !!stmt.get();
+  },
+};
+
 // Export database instance and initialization function
 export default {
   db,
@@ -492,5 +562,6 @@ export default {
   InvoiceDB,
   EmailDB,
   LegalValidationDB,
-  AuditLog
+  AuditLog,
+  CompanyProfileDB,
 };

@@ -3,12 +3,14 @@ dotenv.config({ path: '../.env' });
 
 import express from 'express';
 import cors from 'cors';
+import * as path from 'path';
 import { initializeDatabase } from './database/db';
 import { initEmailTransport } from './services/email-transport';
 import leadsRoutes from './routes/leads.routes';
 import dealsRoutes from './routes/deals.routes';
 import tasksRoutes from './routes/tasks.routes';
 import dashboardRoutes from './routes/dashboard.routes';
+import companyRoutes from './routes/company.routes';
 import emailsRoutes from './routes/emails.routes';
 
 const app = express();
@@ -17,6 +19,9 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve uploaded files (logos, documents)
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Initialize database
 initializeDatabase();
@@ -30,6 +35,7 @@ app.use('/api/deals', dealsRoutes);
 app.use('/api/tasks', tasksRoutes);
 app.use('/api/emails', emailsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/company', companyRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

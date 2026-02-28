@@ -125,6 +125,29 @@ export interface NegotiationResult extends AgentResponse {
   };
 }
 
+// Company profile context passed to agents
+export interface AgentCompanyContexts {
+  marketing: string;
+  sales: string;
+  legal: string;
+  accounting: string;
+  email: string;
+}
+
+export interface CompanyProfileContext {
+  id: number;
+  name: string;
+  website?: string;
+  logo_path?: string;
+  industry?: string;
+  description?: string;
+  business_model?: string;
+  target_customers?: string;
+  products_services?: string;
+  geographic_focus?: string;
+  agentContexts: AgentCompanyContexts;
+}
+
 // API request bodies
 export interface CreateLeadRequest {
   companyName: string;

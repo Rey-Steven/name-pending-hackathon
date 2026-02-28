@@ -4,30 +4,64 @@ import { LegalAgent } from '../agents/legal-agent';
 import { AccountingAgent } from '../agents/accounting-agent';
 import { EmailService } from '../agents/email-service';
 import { TaskQueue } from './task-queue';
-import { DealDB, LeadDB, AuditLog, EmailDB, db } from '../database/db';
+import { DealDB, LeadDB, AuditLog, EmailDB, CompanyProfileDB } from '../database/db';
 import { broadcastEvent } from '../routes/dashboard.routes';
-import { fetchRepliesForDeal } from './email-transport';
-import { sendRealEmail } from './email-transport';
+import { CompanyProfileContext } from '../types';
+import { fetchRepliesForDeal, sendRealEmail } from './email-transport';
 
-// Instantiate all agents
-const marketingAgent = new MarketingAgent();
-const salesAgent = new SalesAgent();
-const legalAgent = new LegalAgent();
-const accountingAgent = new AccountingAgent();
-const emailService = new EmailService();
+function loadCompanyProfile(): CompanyProfileContext | null {
+  const raw = CompanyProfileDB.get();
+  if (!raw) return null;
+  try {
+    const agentContexts = JSON.parse(raw.agent_context_json || '{}');
+    return {
+      id: raw.id!,
+      name: raw.name,
+      website: raw.website,
+      logo_path: raw.logo_path,
+      industry: raw.industry,
+      description: raw.description,
+      business_model: raw.business_model,
+      target_customers: raw.target_customers,
+      products_services: raw.products_services,
+      geographic_focus: raw.geographic_focus,
+      agentContexts,
+    };
+  } catch {
+    return null;
+  }
+}
 
 const MAX_NEGOTIATION_ROUNDS = 3;
 
 export class WorkflowEngine {
+
+  // Create all agents loaded with the current company profile
+  private createAgents() {
+    const companyProfile = loadCompanyProfile();
+    return {
+      companyProfile,
+      marketingAgent: new MarketingAgent(companyProfile),
+      salesAgent: new SalesAgent(companyProfile),
+      legalAgent: new LegalAgent(companyProfile),
+      accountingAgent: new AccountingAgent(companyProfile),
+      emailService: new EmailService(companyProfile),
+    };
+  }
 
   // ─── PHASE 1: Lead → Marketing → Sales → Proposal Email → STOP ───
 
   async startWorkflow(leadId: number) {
     const startTime = Date.now();
 
+    const { companyProfile, marketingAgent, salesAgent, emailService } = this.createAgents();
+
     console.log('\n' + '═'.repeat(60));
     console.log('  🚀 WORKFLOW PHASE 1 - Lead Qualification & Proposal');
     console.log('  📋 Lead ID:', leadId);
+    if (companyProfile) {
+      console.log(`  🏢 Company: ${companyProfile.name}`);
+    }
     console.log('═'.repeat(60));
 
     AuditLog.log('workflow', 'workflow_started', 'lead', leadId, { leadId });
@@ -137,6 +171,8 @@ export class WorkflowEngine {
 
     const lead = LeadDB.findById(deal.lead_id);
     if (!lead) throw new Error(`Lead ${deal.lead_id} not found`);
+
+    const { salesAgent } = this.createAgents();
 
     console.log('\n' + '═'.repeat(60));
     console.log('  📥 CHECKING FOR CUSTOMER REPLY');
@@ -348,6 +384,8 @@ export class WorkflowEngine {
 
   private async completeWorkflow(dealId: number, leadId: number, deal: any) {
     console.log('\n📍 Running Legal → Accounting → Invoice pipeline');
+
+    const { legalAgent, accountingAgent, emailService } = this.createAgents();
 
     const salesData = {
       productName: deal.product_name,
