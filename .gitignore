@@ -34,3 +34,6 @@ npm-debug.log*
 # Temp files
 tmp/
 temp/
+
+# Uploaded files (runtime artifacts — not source code)
+backend/uploads/
