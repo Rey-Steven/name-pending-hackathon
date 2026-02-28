@@ -1,15 +1,17 @@
 import { callAI, parseJSONResponse, ModelTier } from '../services/ai-service';
 import { AuditLog } from '../database/db';
-import { AgentType, AgentResponse } from '../types';
+import { AgentType, AgentResponse, CompanyProfileContext } from '../types';
 import { broadcastEvent } from '../routes/dashboard.routes';
 
 export abstract class BaseAgent {
   readonly agentType: AgentType;
   readonly modelTier: ModelTier;
+  protected companyProfile: CompanyProfileContext | null;
 
-  constructor(agentType: AgentType, modelTier: ModelTier = 'sonnet') {
+  constructor(agentType: AgentType, modelTier: ModelTier = 'sonnet', companyProfile: CompanyProfileContext | null = null) {
     this.agentType = agentType;
     this.modelTier = modelTier;
+    this.companyProfile = companyProfile;
   }
 
   // Each agent defines its own system prompt
@@ -17,6 +19,25 @@ export abstract class BaseAgent {
 
   // Each agent builds the user prompt from its input data
   abstract buildUserPrompt(input: any): string;
+
+  // Build a company context header to prepend to system prompts
+  protected buildCompanyContextHeader(agentKey: keyof CompanyProfileContext['agentContexts']): string {
+    if (!this.companyProfile) return '';
+    const ctx = this.companyProfile.agentContexts[agentKey];
+    return `You are working for ${this.companyProfile.name}.
+
+COMPANY PROFILE:
+- Industry: ${this.companyProfile.industry || 'Not specified'}
+- Business Model: ${this.companyProfile.business_model || 'Not specified'}
+- Target Customers: ${this.companyProfile.target_customers || 'Not specified'}
+- Products/Services: ${this.companyProfile.products_services || 'Not specified'}
+- Geographic Focus: ${this.companyProfile.geographic_focus || 'Not specified'}
+
+YOUR DEPARTMENT CONTEXT:
+${ctx}
+
+`;
+  }
 
   // Execute the agent: call AI, parse response, log everything
   async execute<T extends AgentResponse>(input: any, context?: { dealId?: number; leadId?: number; taskId?: number }): Promise<T> {

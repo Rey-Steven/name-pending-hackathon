@@ -4,24 +4,52 @@ import { LegalAgent } from '../agents/legal-agent';
 import { AccountingAgent } from '../agents/accounting-agent';
 import { EmailService } from '../agents/email-service';
 import { TaskQueue } from './task-queue';
-import { DealDB, AuditLog } from '../database/db';
+import { DealDB, AuditLog, CompanyProfileDB } from '../database/db';
 import { broadcastEvent } from '../routes/dashboard.routes';
+import { CompanyProfileContext } from '../types';
 
-// Instantiate all agents
-const marketingAgent = new MarketingAgent();
-const salesAgent = new SalesAgent();
-const legalAgent = new LegalAgent();
-const accountingAgent = new AccountingAgent();
-const emailService = new EmailService();
+function loadCompanyProfile(): CompanyProfileContext | null {
+  const raw = CompanyProfileDB.get();
+  if (!raw) return null;
+  try {
+    const agentContexts = JSON.parse(raw.agent_context_json || '{}');
+    return {
+      id: raw.id!,
+      name: raw.name,
+      website: raw.website,
+      logo_path: raw.logo_path,
+      industry: raw.industry,
+      description: raw.description,
+      business_model: raw.business_model,
+      target_customers: raw.target_customers,
+      products_services: raw.products_services,
+      geographic_focus: raw.geographic_focus,
+      agentContexts,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export class WorkflowEngine {
   // Start the full lead-to-invoice workflow
   async startWorkflow(leadId: number) {
     const startTime = Date.now();
 
+    // Load company profile and instantiate agents with it
+    const companyProfile = loadCompanyProfile();
+    const marketingAgent = new MarketingAgent(companyProfile);
+    const salesAgent = new SalesAgent(companyProfile);
+    const legalAgent = new LegalAgent(companyProfile);
+    const accountingAgent = new AccountingAgent(companyProfile);
+    const emailService = new EmailService(companyProfile);
+
     console.log('\n' + '═'.repeat(60));
     console.log('  🚀 WORKFLOW STARTED - Lead-to-Invoice Automation');
     console.log('  📋 Lead ID:', leadId);
+    if (companyProfile) {
+      console.log(`  🏢 Company: ${companyProfile.name}`);
+    }
     console.log('═'.repeat(60));
 
     AuditLog.log('workflow', 'workflow_started', 'lead', leadId, { leadId });

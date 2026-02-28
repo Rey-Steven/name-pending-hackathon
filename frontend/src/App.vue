@@ -1,14 +1,26 @@
 <template>
   <div class="min-h-screen bg-gray-50">
-    <!-- Navigation -->
-    <nav class="bg-white shadow-sm border-b">
+    <!-- Navigation — hidden on the setup page -->
+    <nav v-if="!isSetupPage" class="bg-white shadow-sm border-b">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16">
           <div class="flex items-center">
             <router-link to="/dashboard" class="flex items-center space-x-2">
-              <span class="text-2xl">🇬🇷</span>
-              <span class="font-bold text-xl text-gray-900">AgentFlow</span>
-              <span class="text-sm text-gray-500 ml-2">Zero Human Company</span>
+              <!-- Company logo or default icon -->
+              <img
+                v-if="companyStore.logoUrl"
+                :src="companyStore.logoUrl"
+                alt="Logo"
+                class="h-8 w-8 rounded-lg object-contain"
+              />
+              <span v-else class="text-2xl">🤖</span>
+
+              <div class="flex flex-col leading-tight">
+                <span class="font-bold text-lg text-gray-900 leading-none">
+                  {{ companyStore.profile?.name || 'AgentFlow' }}
+                </span>
+                <span class="text-xs text-gray-400">AI-Powered Company</span>
+              </div>
             </router-link>
           </div>
           <div class="flex items-center space-x-4">
@@ -24,14 +36,32 @@
             >
               + New Lead
             </router-link>
+            <router-link
+              to="/setup"
+              class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-100"
+              title="Company Settings"
+            >
+              ⚙️
+            </router-link>
           </div>
         </div>
       </div>
     </nav>
 
     <!-- Main content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main :class="isSetupPage ? '' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'">
       <router-view />
     </main>
   </div>
 </template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { useCompanyStore } from './stores/company'
+
+const route = useRoute()
+const companyStore = useCompanyStore()
+
+const isSetupPage = computed(() => route.path === '/setup')
+</script>

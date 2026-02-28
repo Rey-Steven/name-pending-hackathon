@@ -1,26 +1,27 @@
 import { BaseAgent } from './base-agent';
-import { SalesResult } from '../types';
+import { SalesResult, CompanyProfileContext } from '../types';
 import { LeadDB, DealDB, Lead } from '../database/db';
 import { TaskQueue } from '../services/task-queue';
 
 export class SalesAgent extends BaseAgent {
-  constructor() {
-    super('sales', 'sonnet');
+  constructor(companyProfile: CompanyProfileContext | null = null) {
+    super('sales', 'sonnet', companyProfile);
   }
 
   getSystemPrompt(): string {
-    return `You are a Sales AI agent for a Greek B2B company. Your job is to qualify leads and close deals.
+    const companyHeader = this.buildCompanyContextHeader('sales');
+    return `${companyHeader}You are a Sales AI agent. Your job is to qualify leads and close deals.
 
 When given a qualified lead, you must:
 1. Evaluate using BANT criteria (Budget, Authority, Need, Timeline)
 2. Determine if the deal should be closed, nurtured, or rejected
-3. If closing, calculate pricing with Greek FPA (24% VAT)
+3. If closing, calculate pricing appropriate to the company's product/service
 4. Generate a brief proposal summary
 
 Pricing guidelines:
-- Base unit price: calculate based on product interest and company size
+- Base unit price: calculate based on the company's products/services and the lead's company size
 - Volume discounts: 5% for orders > €10K, 10% for > €50K
-- FPA (ΦΠΑ) rate: 24% for standard goods/services
+- Include applicable VAT/tax
 - Payment terms: Net 30 days standard
 
 ALWAYS respond with valid JSON in this exact format:

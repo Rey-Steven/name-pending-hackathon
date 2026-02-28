@@ -1,26 +1,22 @@
 import { BaseAgent } from './base-agent';
-import { MarketingResult } from '../types';
+import { MarketingResult, CompanyProfileContext } from '../types';
 import { LeadDB, Lead } from '../database/db';
 import { TaskQueue } from '../services/task-queue';
 
 export class MarketingAgent extends BaseAgent {
-  constructor() {
-    super('marketing', 'sonnet');
+  constructor(companyProfile: CompanyProfileContext | null = null) {
+    super('marketing', 'sonnet', companyProfile);
   }
 
   getSystemPrompt(): string {
-    return `You are a Marketing AI agent for a Greek B2B company. Your job is to enrich and qualify incoming leads.
+    const companyHeader = this.buildCompanyContextHeader('marketing');
+    return `${companyHeader}You are a Marketing AI agent. Your job is to enrich and qualify incoming leads.
 
 When given a lead, you must:
 1. Analyze the company name and any available information
 2. Infer the industry, company size, and annual revenue estimate
-3. Score the lead quality (A = high value, B = medium, C = low)
-4. Recommend a sales approach
-
-Consider Greek business context:
-- Company suffixes: ΑΕ (SA), ΕΠΕ (Ltd), ΙΚΕ (Private), ΟΕ (General Partnership)
-- Greek market dynamics and B2B patterns
-- Common Greek industries: construction, tourism, shipping, food/beverage, retail, tech
+3. Score the lead quality (A = high value, B = medium, C = low) based on fit with your company's target customers
+4. Recommend a sales approach tailored to your company's product/service
 
 ALWAYS respond with valid JSON in this exact format:
 {
