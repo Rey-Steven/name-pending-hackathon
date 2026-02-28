@@ -46,6 +46,8 @@ export interface Deal {
   qualification_result?: string;
   sales_notes?: string;
   negotiation_round?: number;
+  follow_up_count?: number;
+  satisfaction_sent?: boolean;
   status?: string;
   created_at?: string;
   updated_at?: string;
@@ -102,7 +104,7 @@ export interface Email {
   recipient_name: string;
   subject: string;
   body: string;
-  email_type?: 'proposal' | 'invoice' | 'confirmation' | 'follow_up';
+  email_type?: 'proposal' | 'invoice' | 'confirmation' | 'follow_up' | 'satisfaction';
   status?: 'pending' | 'sent' | 'failed';
   error_message?: string;
   created_at?: string;
@@ -140,6 +142,8 @@ export interface CompanyProfile {
   raw_scraped_data?: string;
   agent_context_json: string; // JSON string
   setup_complete?: boolean;
+  kad_codes?: string;       // JSON: [{ code: "6201", description: "..." }]
+  help_center_json?: string; // JSON: { intro: string, faqs: [{question, answer}] }
   created_at?: string;
   updated_at?: string;
 }
@@ -225,6 +229,13 @@ export const DealDB = {
 
   all: async (): Promise<Deal[]> => {
     const snap = await fdb().collection('deals').orderBy('created_at', 'desc').get();
+    return snapToDocs<Deal>(snap);
+  },
+
+  findByStatus: async (statuses: string[]): Promise<Deal[]> => {
+    const snap = await fdb().collection('deals')
+      .where('status', 'in', statuses)
+      .get();
     return snapToDocs<Deal>(snap);
   },
 };

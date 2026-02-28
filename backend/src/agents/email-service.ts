@@ -22,7 +22,8 @@ Email types:
 - "proposal": Business proposal with pricing (invite customer to reply to discuss/accept)
 - "confirmation": Deal closure confirmation
 - "invoice": Invoice delivery email
-- "follow_up": Follow-up message
+- "follow_up": Stale proposal follow-up reminder (up to 3 attempts)
+- "satisfaction": Post-close satisfaction check-in (sent 3 days after deal completes)
 
 IMPORTANT: The recipientEmail MUST be the exact email from the RECIPIENT section below. Do not make up emails.
 Keep response concise to avoid truncation:
@@ -39,7 +40,7 @@ ALWAYS respond with valid JSON in this exact format:
     "body": "full email body",
     "recipientEmail": "MUST use exact email from recipient info",
     "recipientName": "name",
-    "emailType": "proposal" | "confirmation" | "invoice" | "follow_up"
+    "emailType": "proposal" | "confirmation" | "invoice" | "follow_up" | "satisfaction"
   }
 }`;
   }
@@ -82,6 +83,20 @@ INVOICE TO SEND:
 - Payment Terms: ${invoiceData.paymentTerms}
 - Due Date: ${invoiceData.dueDate}
 Compose an invoice delivery email with payment instructions.`;
+    } else if (emailType === 'follow_up' && salesResult) {
+      const attempt = (salesResult.followUpCount ?? 0) + 1;
+      context = `
+STALE PROPOSAL FOLLOW-UP (attempt ${attempt} of 3):
+- Product: ${salesResult.productName}
+- Total: €${salesResult.totalAmount}
+- We sent a proposal ${salesResult.daysSinceProposal ?? 7}+ days ago and have not received a reply.
+Compose a polite reminder asking if they had the chance to review our proposal and if they have any questions or would like to discuss terms.`;
+    } else if (emailType === 'satisfaction' && salesResult) {
+      context = `
+POST-CLOSE SATISFACTION CHECK-IN:
+- Product/Service delivered: ${salesResult.productName || 'our service'}
+- Deal completed and invoice sent.
+Compose a warm check-in email that: thanks the customer for choosing us, asks if they are satisfied with the product/service, invites any feedback or questions, and mentions we are available for future needs.`;
     } else {
       context = `
 Compose a professional follow-up email.`;
@@ -102,7 +117,7 @@ Write the email in Greek language. Use the EXACT email address "${lead.contact_e
 
   async sendEmail(
     leadId: string,
-    emailType: 'proposal' | 'confirmation' | 'invoice' | 'follow_up',
+    emailType: 'proposal' | 'confirmation' | 'invoice' | 'follow_up' | 'satisfaction',
     context: { dealId?: string; salesResult?: any; invoiceData?: any; invoiceNumber?: string; invoiceId?: string }
   ): Promise<EmailResult> {
     const lead = await LeadDB.findById(leadId);

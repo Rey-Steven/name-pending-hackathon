@@ -23,6 +23,8 @@ export interface CompanyProfile {
   geographic_focus?: string
   agent_context_json: AgentContexts
   setup_complete: boolean
+  kad_codes?: string        // raw JSON string — parsed in component
+  help_center_json?: string
 }
 
 export const useCompanyStore = defineStore('company', () => {

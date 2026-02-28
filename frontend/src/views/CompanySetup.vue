@@ -240,6 +240,45 @@
             </div>
           </div>
 
+          <!-- KAD Codes -->
+          <div v-if="parsedKadCodes.length > 0" class="bg-gray-50 rounded-xl p-4">
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-sm font-semibold text-gray-700">🏛️ KAD Codes (Greek Business Activity)</p>
+              <button
+                v-if="isEditMode"
+                @click="editingKad = !editingKad"
+                class="text-xs text-blue-600 hover:underline"
+              >
+                {{ editingKad ? 'Cancel' : 'Edit' }}
+              </button>
+            </div>
+            <div v-if="!editingKad" class="flex flex-wrap gap-2">
+              <span
+                v-for="kad in parsedKadCodes"
+                :key="kad.code"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium"
+              >
+                <span class="font-bold">{{ kad.code }}</span>
+                <span class="text-blue-600">{{ kad.description }}</span>
+              </span>
+            </div>
+            <div v-else class="space-y-2">
+              <textarea
+                v-model="kadEditText"
+                rows="4"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                placeholder='[{"code":"6201","description":"Computer programming activities"}]'
+              />
+              <button
+                @click="saveKadCodes"
+                :disabled="savingKad"
+                class="px-4 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {{ savingKad ? 'Saving...' : 'Save KAD Codes' }}
+              </button>
+            </div>
+          </div>
+
           <!-- Agent contexts (collapsible) -->
           <div>
             <button
@@ -296,9 +335,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCompanyStore } from '../stores/company'
+import { companyApi } from '../api/client'
 
 const router = useRouter()
 const companyStore = useCompanyStore()
@@ -309,6 +349,19 @@ const setupError = ref<string | null>(null)
 const analysisProgress = ref(-1)
 const isEditMode = ref(false)
 const isRescraping = ref(false)
+
+// KAD codes editing
+const editingKad = ref(false)
+const kadEditText = ref('')
+const savingKad = ref(false)
+
+const parsedKadCodes = computed<Array<{ code: string; description: string }>>(() => {
+  try {
+    return JSON.parse(companyStore.profile?.kad_codes || '[]')
+  } catch {
+    return []
+  }
+})
 
 const form = ref({
   name: '',
@@ -328,6 +381,7 @@ onMounted(async () => {
     form.value.name = p.name
     form.value.website = p.website || ''
     form.value.industry = p.industry || ''
+    kadEditText.value = p.kad_codes || '[]'
     // Show the review step directly so they see current state
     currentStep.value = 4
   }
@@ -455,10 +509,29 @@ async function triggerRescrape() {
   isRescraping.value = true
   try {
     await companyStore.rescrapeProfile()
+    kadEditText.value = companyStore.profile?.kad_codes || '[]'
   } catch {
     // error already set in store
   } finally {
     isRescraping.value = false
+  }
+}
+
+async function saveKadCodes() {
+  savingKad.value = true
+  try {
+    // Validate JSON
+    JSON.parse(kadEditText.value)
+    await companyApi.update({ kad_codes: kadEditText.value })
+    // Update store locally
+    if (companyStore.profile) {
+      companyStore.profile.kad_codes = kadEditText.value
+    }
+    editingKad.value = false
+  } catch {
+    alert('Invalid JSON — please check the format.')
+  } finally {
+    savingKad.value = false
   }
 }
 

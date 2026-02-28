@@ -15,7 +15,7 @@ export type TaskType =
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type LeadScore = 'A' | 'B' | 'C';
 export type LeadStatus = 'new' | 'qualified' | 'contacted' | 'converted' | 'rejected';
-export type DealStatus = 'pending' | 'proposal_sent' | 'negotiating' | 'legal_review' | 'invoicing' | 'completed' | 'failed';
+export type DealStatus = 'pending' | 'proposal_sent' | 'negotiating' | 'legal_review' | 'invoicing' | 'completed' | 'failed' | 'no_response' | 'reopened';
 export type RiskLevel = 'low' | 'medium' | 'high';
 
 // Agent response from Claude
@@ -92,7 +92,7 @@ export interface EmailResult extends AgentResponse {
     body: string;
     recipientEmail: string;
     recipientName: string;
-    emailType: 'proposal' | 'invoice' | 'confirmation' | 'follow_up';
+    emailType: 'proposal' | 'invoice' | 'confirmation' | 'follow_up' | 'satisfaction';
   };
 }
 
@@ -146,6 +146,7 @@ export interface CompanyProfileContext {
   products_services?: string;
   geographic_focus?: string;
   agentContexts: AgentCompanyContexts;
+  kad_codes?: string;
 }
 
 // API request bodies

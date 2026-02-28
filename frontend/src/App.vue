@@ -31,6 +31,12 @@
               Dashboard
             </router-link>
             <router-link
+              to="/help"
+              class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100"
+            >
+              Help
+            </router-link>
+            <router-link
               to="/leads/new"
               class="px-4 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
             >

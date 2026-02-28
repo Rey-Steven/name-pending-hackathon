@@ -117,6 +117,8 @@ router.post(
         user_provided_text: userText || undefined,
         raw_scraped_data: scrapedText || undefined,
         agent_context_json: JSON.stringify(profileResult.agentContexts),
+        kad_codes: JSON.stringify(profileResult.kad_codes ?? []),
+        help_center_json: JSON.stringify(profileResult.help_center_content ?? {}),
         setup_complete: true,
       };
 
@@ -145,8 +147,13 @@ router.put('/', async (req: Request, res: Response) => {
   if (!profile?.id) {
     return res.status(404).json({ error: 'No company profile found' });
   }
-  const { name, website, industry } = req.body;
-  await CompanyProfileDB.update(profile.id, { name, website, industry });
+  const { name, website, industry, kad_codes } = req.body;
+  const updates: any = {};
+  if (name !== undefined) updates.name = name;
+  if (website !== undefined) updates.website = website;
+  if (industry !== undefined) updates.industry = industry;
+  if (kad_codes !== undefined) updates.kad_codes = kad_codes;
+  await CompanyProfileDB.update(profile.id, updates);
   res.json({ success: true });
 });
 
@@ -180,12 +187,32 @@ router.post('/rescrape', async (_req: Request, res: Response) => {
       geographic_focus: profileResult.geographic_focus,
       raw_scraped_data: scrapedText || undefined,
       agent_context_json: JSON.stringify(profileResult.agentContexts),
+      kad_codes: JSON.stringify(profileResult.kad_codes ?? []),
+      help_center_json: JSON.stringify(profileResult.help_center_content ?? {}),
     });
 
     const updated = await CompanyProfileDB.get();
     res.json({ ...updated, agent_context_json: JSON.parse(updated!.agent_context_json) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/company/help-center - return parsed help center content for public page
+router.get('/help-center', async (_req: Request, res: Response) => {
+  const profile = await CompanyProfileDB.get();
+  if (!profile?.help_center_json) {
+    return res.status(404).json({ error: 'Help center content not yet generated. Run company setup first.' });
+  }
+  try {
+    const content = JSON.parse(profile.help_center_json);
+    res.json({
+      companyName: profile.name,
+      logoPath: profile.logo_path ? `/uploads/${profile.logo_path.replace('uploads/', '')}` : null,
+      ...content,
+    });
+  } catch {
+    res.status(500).json({ error: 'Failed to parse help center content' });
   }
 });
 

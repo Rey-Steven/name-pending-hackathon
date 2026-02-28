@@ -5,6 +5,7 @@ import express from 'express';
 import cors from 'cors';
 import * as path from 'path';
 import { initEmailTransport } from './services/email-transport';
+import { pollStaleLeads, pollLostDeals, pollSatisfactionEmails } from './services/lifecycle-poller';
 import leadsRoutes from './routes/leads.routes';
 import dealsRoutes from './routes/deals.routes';
 import tasksRoutes from './routes/tasks.routes';
@@ -111,12 +112,21 @@ app.listen(PORT, () => {
 ║  🎯 Marketing  💼 Sales  ⚖️  Legal               ║
 ║  📊 Accounting  📧 Email                         ║
 ║                                                  ║
-║  📡 Auto-polling replies every 30s               ║
+║  📡 Auto-polling: replies/stale/lost/satisfaction ║
 ╚══════════════════════════════════════════════════╝
   `);
 
   // Start polling after a short delay to let server fully initialize
-  setTimeout(() => setInterval(pollForReplies, POLL_INTERVAL_MS), 5_000);
+  setTimeout(() => {
+    setInterval(pollForReplies, POLL_INTERVAL_MS);
+    setInterval(pollStaleLeads, 6 * 3_600_000);      // every 6 hours
+    setInterval(pollLostDeals, 24 * 3_600_000);      // every 24 hours
+    setInterval(pollSatisfactionEmails, 24 * 3_600_000); // every 24 hours
+    // Run lifecycle pollers once immediately on startup
+    pollStaleLeads();
+    pollLostDeals();
+    pollSatisfactionEmails();
+  }, 5_000);
 });
 
 export default app;

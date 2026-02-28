@@ -44,9 +44,10 @@ export const companyApi = {
     axios.post('/api/company/setup', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
-  update: (data: { name?: string; website?: string; industry?: string }) =>
+  update: (data: { name?: string; website?: string; industry?: string; kad_codes?: string }) =>
     api.put('/company', data),
   rescrape: () => api.post('/company/rescrape'),
+  getHelpCenter: () => api.get('/company/help-center'),
 }
 
 // SSE connection for real-time events
