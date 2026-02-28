@@ -225,9 +225,9 @@ export const LeadDB = {
   all: async (companyId: string): Promise<Lead[]> => {
     const snap = await fdb().collection('leads')
       .where('company_id', '==', companyId)
-      .orderBy('created_at', 'desc')
       .get();
-    return snapToDocs<Lead>(snap);
+    return snapToDocs<Lead>(snap)
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
   },
 };
 
@@ -275,9 +275,9 @@ export const DealDB = {
   all: async (companyId: string): Promise<Deal[]> => {
     const snap = await fdb().collection('deals')
       .where('company_id', '==', companyId)
-      .orderBy('created_at', 'desc')
       .get();
-    return snapToDocs<Deal>(snap);
+    return snapToDocs<Deal>(snap)
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
   },
 
   findByStatus: async (statuses: string[]): Promise<Deal[]> => {
@@ -347,9 +347,9 @@ export const TaskDB = {
   all: async (companyId: string): Promise<Task[]> => {
     const snap = await fdb().collection('tasks')
       .where('company_id', '==', companyId)
-      .orderBy('created_at', 'desc')
       .get();
-    return snapToDocs<Task>(snap);
+    return snapToDocs<Task>(snap)
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
   },
 
   findByDeal: async (dealId: string): Promise<Task[]> => {
@@ -405,9 +405,9 @@ export const InvoiceDB = {
   all: async (companyId: string): Promise<Invoice[]> => {
     const snap = await fdb().collection('invoices')
       .where('company_id', '==', companyId)
-      .orderBy('created_at', 'desc')
       .get();
-    return snapToDocs<Invoice>(snap);
+    return snapToDocs<Invoice>(snap)
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
   },
 
   delete: async (id: string): Promise<void> => softDeleteDoc('invoices', id),
@@ -469,9 +469,9 @@ export const EmailDB = {
   all: async (companyId: string): Promise<Email[]> => {
     const snap = await fdb().collection('emails')
       .where('company_id', '==', companyId)
-      .orderBy('created_at', 'desc')
       .get();
-    return snapToDocs<Email>(snap);
+    return snapToDocs<Email>(snap)
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
   },
 
   // Used by email-transport.ts to match inbox replies to our sent emails
