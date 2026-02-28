@@ -584,6 +584,46 @@ export const AuditLog = {
   },
 };
 
+// ─── App Settings ─────────────────────────────────────────────
+// Stored in Firebase at settings/app
+
+export interface AppSettings {
+  reply_poll_interval_minutes: number;  // default: 30
+  stale_lead_days: number;              // default: 7
+  max_followup_attempts: number;        // default: 3
+  lost_deal_reopen_days: number;        // default: 60
+  satisfaction_email_days: number;      // default: 3
+  max_offer_rounds: number;             // default: 3
+}
+
+const DEFAULT_SETTINGS: AppSettings = {
+  reply_poll_interval_minutes: 30,
+  stale_lead_days: 7,
+  max_followup_attempts: 3,
+  lost_deal_reopen_days: 60,
+  satisfaction_email_days: 3,
+  max_offer_rounds: 3,
+};
+
+export const AppSettingsDB = {
+  get: async (): Promise<AppSettings> => {
+    const doc = await fdb().doc('settings/app').get();
+    if (!doc.exists) return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, ...doc.data() } as AppSettings;
+  },
+
+  update: async (updates: Partial<AppSettings>): Promise<AppSettings> => {
+    // Only allow known keys with numeric values
+    const allowed = Object.keys(DEFAULT_SETTINGS) as (keyof AppSettings)[];
+    const safe: Partial<AppSettings> = {};
+    for (const key of allowed) {
+      if (updates[key] !== undefined) safe[key] = updates[key] as number;
+    }
+    await fdb().doc('settings/app').set(safe, { merge: true });
+    return AppSettingsDB.get();
+  },
+};
+
 // ─── Company Profile ──────────────────────────────────────────
 // Multi-company: company_profiles/{auto-id} collection
 // Active company pointer: settings/active.active_company_id

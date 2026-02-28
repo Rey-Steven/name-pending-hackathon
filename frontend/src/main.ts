@@ -15,12 +15,14 @@ import DealsList from './views/DealsList.vue'
 import TasksList from './views/TasksList.vue'
 import InvoicesList from './views/InvoicesList.vue'
 import EmailsView from './views/EmailsView.vue'
+import Settings from './views/Settings.vue'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', redirect: '/dashboard' },
     { path: '/setup', component: CompanySetup },
+    { path: '/settings', component: Settings },
     { path: '/dashboard', component: Dashboard },
     { path: '/leads', component: LeadsList },
     { path: '/leads/new', component: LeadForm },
@@ -44,8 +46,8 @@ import { useCompanyStore } from './stores/company'
 let setupChecked = false
 
 router.beforeEach(async (to) => {
-  // Always allow access to setup and help pages
-  if (to.path === '/setup' || to.path === '/help') return true
+  // Always allow access to setup, settings, and help pages
+  if (to.path === '/setup' || to.path === '/settings' || to.path === '/help') return true
 
   // Only check once per session to avoid repeated API calls
   if (!setupChecked) {

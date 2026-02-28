@@ -59,6 +59,11 @@ export const invoicesApi = {
   getById: (id: string) => api.get(`/invoices/${id}`),
 }
 
+export const settingsApi = {
+  get: () => api.get('/settings'),
+  update: (data: Record<string, number>) => api.put('/settings', data),
+}
+
 export const emailsApi = {
   getAll: () => api.get('/emails'),
   getThreads: () => api.get('/emails/threads'),

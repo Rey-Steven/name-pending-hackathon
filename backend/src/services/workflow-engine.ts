@@ -4,7 +4,7 @@ import { LegalAgent } from '../agents/legal-agent';
 import { AccountingAgent } from '../agents/accounting-agent';
 import { EmailAgent } from '../agents/email-agent';
 import { TaskQueue } from './task-queue';
-import { DealDB, LeadDB, AuditLog, CompanyProfileDB, Lead } from '../database/db';
+import { DealDB, LeadDB, AuditLog, CompanyProfileDB, AppSettingsDB, Lead } from '../database/db';
 import { generateOfferPDF } from './pdf-generator';
 import { broadcastEvent } from '../routes/dashboard.routes';
 import { CompanyProfileContext } from '../types';
@@ -39,7 +39,7 @@ async function loadCompanyProfile(): Promise<CompanyProfileContext | null> {
   }
 }
 
-const MAX_OFFER_ROUNDS = 3;
+// MAX_OFFER_ROUNDS is now loaded dynamically from AppSettingsDB
 
 // Statuses where we listen for customer replies
 const REPLY_AWAITING_STATUSES = ['lead_contacted', 'in_pipeline', 'offer_sent', 'proposal_sent', 'negotiating'];
@@ -192,6 +192,7 @@ export class WorkflowEngine {
     if (!lead) throw new Error(`Lead ${deal.lead_id} not found`);
 
     const { salesAgent, emailAgent } = await this.createAgents();
+    const { max_offer_rounds: MAX_OFFER_ROUNDS } = await AppSettingsDB.get();
 
     // Normalize legacy statuses to new stage names for the agent
     const effectiveStage =

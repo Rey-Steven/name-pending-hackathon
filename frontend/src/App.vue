@@ -117,13 +117,35 @@
             >
               + New Lead
             </router-link>
-            <router-link
-              to="/setup"
-              class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-100"
-              title="Company Settings"
-            >
-              ⚙️
-            </router-link>
+            <!-- Gear icon dropdown -->
+            <div class="relative" ref="settingsRef">
+              <button
+                @click.stop="toggleSettings"
+                class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:bg-gray-100"
+                title="Settings"
+              >
+                ⚙️
+              </button>
+              <div
+                v-if="settingsOpen"
+                class="absolute top-full right-0 mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-200 z-50 py-1"
+              >
+                <router-link
+                  to="/setup"
+                  @click="settingsOpen = false"
+                  class="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  🏢 Company Setup
+                </router-link>
+                <router-link
+                  to="/settings"
+                  @click="settingsOpen = false"
+                  class="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  ⚙️ Settings
+                </router-link>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -147,6 +169,8 @@ const companyStore = useCompanyStore()
 const isSetupPage = computed(() => route.path === '/setup')
 const switcherOpen = ref(false)
 const switcherRef = ref<HTMLElement | null>(null)
+const settingsOpen = ref(false)
+const settingsRef = ref<HTMLElement | null>(null)
 
 const companyInitials = computed(() => {
   const name = companyStore.profile?.name || ''
@@ -155,6 +179,12 @@ const companyInitials = computed(() => {
 
 function toggleSwitcher() {
   switcherOpen.value = !switcherOpen.value
+  settingsOpen.value = false
+}
+
+function toggleSettings() {
+  settingsOpen.value = !settingsOpen.value
+  switcherOpen.value = false
 }
 
 async function switchCompany(id: string) {
@@ -178,6 +208,9 @@ async function removeCompany(id: string) {
 function onClickOutside(e: MouseEvent) {
   if (switcherRef.value && !switcherRef.value.contains(e.target as Node)) {
     switcherOpen.value = false
+  }
+  if (settingsRef.value && !settingsRef.value.contains(e.target as Node)) {
+    settingsOpen.value = false
   }
 }
 

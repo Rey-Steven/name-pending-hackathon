@@ -1,4 +1,4 @@
-import { DealDB, LeadDB, EmailDB } from '../database/db';
+import { DealDB, LeadDB, EmailDB, AppSettingsDB } from '../database/db';
 import { CompanyProfileDB } from '../database/db';
 import { EmailAgent } from '../agents/email-agent';
 
@@ -39,11 +39,12 @@ export async function pollStaleLeads(): Promise<void> {
   pollingStale = true;
 
   try {
+    const { stale_lead_days, max_followup_attempts } = await AppSettingsDB.get();
     // Include both new ('offer_sent') and legacy ('proposal_sent') statuses
     const deals = await DealDB.findByStatus(['offer_sent', 'proposal_sent']);
     const stale = deals.filter(d => {
       const updatedAt = d.updated_at || d.created_at || '';
-      return updatedAt && daysSince(updatedAt) >= 7 && (d.follow_up_count ?? 0) < 3;
+      return updatedAt && daysSince(updatedAt) >= stale_lead_days && (d.follow_up_count ?? 0) < max_followup_attempts;
     });
 
     if (stale.length === 0) return;
@@ -80,10 +81,10 @@ export async function pollStaleLeads(): Promise<void> {
         const newCount = followUpCount + 1;
         await DealDB.update(deal.id!, {
           follow_up_count: newCount,
-          ...(newCount >= 3 ? { status: 'no_response' } : {}),
+          ...(newCount >= max_followup_attempts ? { status: 'no_response' } : {}),
         });
 
-        console.log(`  ✅ Deal #${deal.id}: follow-up #${newCount} sent${newCount >= 3 ? ' → marked no_response' : ''}`);
+        console.log(`  ✅ Deal #${deal.id}: follow-up #${newCount} sent${newCount >= max_followup_attempts ? ' → marked no_response' : ''}`);
       } catch (err: any) {
         console.error(`  ❌ Deal #${deal.id} follow-up error:`, err.message);
       }
@@ -105,11 +106,12 @@ export async function pollLostDeals(): Promise<void> {
   pollingLost = true;
 
   try {
+    const { lost_deal_reopen_days } = await AppSettingsDB.get();
     // Include both new ('closed_lost') and legacy ('failed', 'no_response') statuses
     const deals = await DealDB.findByStatus(['closed_lost', 'failed', 'no_response']);
     const toReopen = deals.filter(d => {
       const updatedAt = d.updated_at || d.created_at || '';
-      return updatedAt && daysSince(updatedAt) >= 60;
+      return updatedAt && daysSince(updatedAt) >= lost_deal_reopen_days;
     });
 
     if (toReopen.length === 0) return;
@@ -168,13 +170,14 @@ export async function pollSatisfactionEmails(): Promise<void> {
   pollingSatisfaction = true;
 
   try {
+    const { satisfaction_email_days } = await AppSettingsDB.get();
     // Include both new ('closed_won') and legacy ('completed') statuses
     const deals = await DealDB.findByStatus(['closed_won', 'completed']);
     const toNotify = deals.filter(d => {
       if (d.satisfaction_sent) return false;
       const updatedAt = d.updated_at || d.created_at || '';
       const age = daysSince(updatedAt);
-      return age >= 3 && age < 4;
+      return age >= satisfaction_email_days && age < satisfaction_email_days + 1;
     });
 
     if (toNotify.length === 0) return;

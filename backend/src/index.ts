@@ -13,6 +13,8 @@ import dashboardRoutes from './routes/dashboard.routes';
 import companyRoutes from './routes/company.routes';
 import emailsRoutes from './routes/emails.routes';
 import invoicesRoutes from './routes/invoices.routes';
+import settingsRoutes from './routes/settings.routes';
+import { AppSettingsDB } from './database/db';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -35,6 +37,7 @@ app.use('/api/emails', emailsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/company', companyRoutes);
 app.use('/api/invoices', invoicesRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -61,7 +64,6 @@ app.post('/api/workflow/start', async (req, res) => {
 });
 
 // ─── Auto-poll for customer replies on active deals ───
-const POLL_INTERVAL_MS = 30_000; // 30 seconds
 let polling = false;
 
 async function pollForReplies() {
@@ -119,8 +121,11 @@ app.listen(PORT, () => {
   `);
 
   // Start polling after a short delay to let server fully initialize
-  setTimeout(() => {
-    setInterval(pollForReplies, POLL_INTERVAL_MS);
+  setTimeout(async () => {
+    const settings = await AppSettingsDB.get();
+    const replyPollMs = settings.reply_poll_interval_minutes * 60 * 1000;
+    console.log(`  📡 Reply poll interval: ${settings.reply_poll_interval_minutes} min`);
+    setInterval(pollForReplies, replyPollMs);
     setInterval(pollStaleLeads, 6 * 3_600_000);      // every 6 hours
     setInterval(pollLostDeals, 24 * 3_600_000);      // every 24 hours
     setInterval(pollSatisfactionEmails, 24 * 3_600_000); // every 24 hours
