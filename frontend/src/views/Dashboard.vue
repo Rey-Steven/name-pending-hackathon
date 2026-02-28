@@ -1,6 +1,6 @@
 <template>
   <div>
-    <h1 class="text-3xl font-bold text-gray-900 mb-8">Agent Dashboard</h1>
+    <h1 class="text-3xl font-bold text-gray-900 mb-8">Dashboard</h1>
 
     <!-- Stats Cards -->
     <div class="grid grid-cols-5 gap-4 mb-8" v-if="store.stats">
@@ -9,8 +9,8 @@
         <p class="text-2xl font-bold">{{ store.stats.leads.total }}</p>
       </div>
       <div class="bg-white rounded-lg shadow p-4 border-l-4 border-sales">
-        <p class="text-sm text-gray-500">Deals</p>
-        <p class="text-2xl font-bold">{{ store.stats.deals.total }}</p>
+        <p class="text-sm text-gray-500">Open Deals</p>
+        <p class="text-2xl font-bold">{{ store.stats.deals.open }}</p>
       </div>
       <div class="bg-white rounded-lg shadow p-4 border-l-4 border-legal">
         <p class="text-sm text-gray-500">Tasks</p>
@@ -23,6 +23,57 @@
       <div class="bg-white rounded-lg shadow p-4 border-l-4 border-email">
         <p class="text-sm text-gray-500">Emails Sent</p>
         <p class="text-2xl font-bold">{{ store.stats.emails.sent }}</p>
+      </div>
+    </div>
+
+    <!-- Sales Pipeline -->
+    <div class="mb-8 bg-white rounded-lg shadow" v-if="store.stats">
+      <div class="p-4 border-b">
+        <h2 class="text-lg font-semibold">Sales Pipeline</h2>
+      </div>
+      <div class="p-4">
+        <!-- Pipeline stages -->
+        <div class="flex items-stretch gap-2 mb-6">
+          <div
+            v-for="stage in pipelineStages"
+            :key="stage.key"
+            class="flex-1 rounded-lg p-3 text-center"
+            :class="stage.bg"
+          >
+            <p class="text-xs font-medium mb-1" :class="stage.label">{{ stage.name }}</p>
+            <p class="text-2xl font-bold" :class="stage.text">{{ store.stats.deals[stage.key] ?? 0 }}</p>
+            <p class="text-xs mt-1" :class="stage.label">deals</p>
+          </div>
+          <div class="flex items-center text-gray-300 text-xl font-thin select-none">›</div>
+          <div class="flex-1 rounded-lg p-3 text-center bg-green-50">
+            <p class="text-xs font-medium mb-1 text-green-600">Closed Won</p>
+            <p class="text-2xl font-bold text-green-700">{{ store.stats.deals.closed_won ?? 0 }}</p>
+            <p class="text-xs mt-1 text-green-600">deals</p>
+          </div>
+          <div class="flex-1 rounded-lg p-3 text-center bg-red-50">
+            <p class="text-xs font-medium mb-1 text-red-500">Closed Lost</p>
+            <p class="text-2xl font-bold text-red-600">{{ store.stats.deals.closed_lost ?? 0 }}</p>
+            <p class="text-xs mt-1 text-red-500">deals</p>
+          </div>
+        </div>
+
+        <!-- Summary metrics -->
+        <div class="grid grid-cols-3 gap-4 border-t pt-4">
+          <div>
+            <p class="text-xs text-gray-500 mb-1">Pipeline Value</p>
+            <p class="text-xl font-bold text-gray-900">{{ formatCurrency(store.stats.deals.pipelineValue) }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-500 mb-1">Won Revenue</p>
+            <p class="text-xl font-bold text-green-700">{{ formatCurrency(store.stats.deals.wonValue) }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-500 mb-1">Win Rate</p>
+            <p class="text-xl font-bold text-gray-900">
+              {{ store.stats.deals.winRate != null ? store.stats.deals.winRate + '%' : '—' }}
+            </p>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -140,6 +191,17 @@ import { workflowApi } from '../api/client'
 import AgentPipeline from '../components/AgentPipeline.vue'
 
 const store = useDashboardStore()
+
+const pipelineStages = [
+  { key: 'lead_contacted', name: 'Lead Contacted', bg: 'bg-blue-50', text: 'text-blue-700', label: 'text-blue-500' },
+  { key: 'in_pipeline',   name: 'In Pipeline',    bg: 'bg-indigo-50', text: 'text-indigo-700', label: 'text-indigo-500' },
+  { key: 'offer_sent',    name: 'Offer Sent',     bg: 'bg-purple-50', text: 'text-purple-700', label: 'text-purple-500' },
+]
+
+function formatCurrency(value: number) {
+  if (!value) return '€0'
+  return '€' + value.toLocaleString('el-GR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+}
 
 const agentLabels: Record<string, string> = {
   marketing: '🎯 Marketing',

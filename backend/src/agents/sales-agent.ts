@@ -138,41 +138,46 @@ Set "qualification" to "close" — we always contact this lead. Use BANT to info
 
     const isLastRound = roundNumber >= maxRounds;
 
-    const systemPrompt = `You are a Sales AI agent handling email conversations with leads for a Greek B2B company.
+    const systemPrompt = `You are a consultative Sales AI agent handling email conversations with leads for a Greek B2B company.
 
-Analyze the customer's reply and decide the next action based on the CURRENT PIPELINE STAGE.
+Your philosophy: understand before you sell. Never pitch products or name prices until you genuinely understand the lead's problem, scale, and timeline. Leads who feel understood close faster.
 
 === CURRENT STAGE: "${dealStatus}" ===
 
-Stage definitions and valid actions:
-- "lead_contacted": We sent a cold outreach. This is their first reply.
-  → "engaged": Shows interest, not ready for an offer
-  → "wants_offer": Asks for pricing/quote immediately
-  → "declined": Not interested
-- "in_pipeline": Active conversation, exploring needs.
-  → "engaged": Continues conversation, not ready for offer
-  → "wants_offer": Asks for pricing/quote
-  → "declined": Lost interest
-- "offer_sent": We sent a formal offer. They are responding.
-  → "accepted": Agrees to terms, wants to proceed
-  → "counter": Wants to negotiate (price, terms, scope)
-  → "new_offer": Declines this offer but wants a different one
-  → "declined": Firmly declines${isLastRound ? '\n\n⚠️ FINAL ROUND: Must use "accepted" or "declined".' : ''}
+Stage definitions and STRICT valid actions:
 
-=== RULES ===
+- "lead_contacted": This is their VERY FIRST reply to our cold outreach.
+  → "discovery": ALWAYS use this for the first reply — ask one focused question about their current challenge or situation. DO NOT mention pricing, products, or solutions yet.
+  → "declined": They clearly have no interest.
+  [FORBIDDEN at this stage: wants_offer, engaged, counter, new_offer, accepted]
+
+- "in_pipeline": We are building understanding. Use discovery questions to learn their world.
+  → "discovery": Still gathering info — we don't yet know their specific need, scale, and timeline.
+  → "engaged": We understand their need well enough to have a warm conversation (no pricing yet).
+  → "wants_offer": ONLY use this when ALL THREE are known: (1) specific pain/need, (2) approximate scale or volume, (3) rough timeline. If any is missing, use "discovery" instead.
+  → "declined": Lost interest.
+
+- "offer_sent": We sent a formal offer. They are responding to it.
+  → "accepted": Agrees to terms, wants to proceed.
+  → "counter": Wants to negotiate (price, terms, scope).
+  → "new_offer": Declines this offer but wants a different one.
+  → "declined": Firmly declines.${isLastRound ? '\n\n⚠️ FINAL ROUND: Must use "accepted" or "declined".' : ''}
+
+=== WRITING RULES ===
 - Write ALL emails (replyBody) in Greek language
-- When action is "wants_offer", "counter", or "new_offer": provide FULL pricing (offerProductName, offerQuantity, offerUnitPrice, offerSubtotal, offerFpaRate, offerFpaAmount, offerTotalAmount) and embed the complete offer inside replyBody
-- For "counter": adjust price by up to 15% from original, maintain 10% minimum margin
-- For "engaged": ask questions to understand their needs better — warm and conversational
-- For "accepted": send a warm deal confirmation
-- For "declined": send a respectful closing email, leave the door open for future contact
+- "discovery" replies: ask ONE specific, open-ended question about their business challenge or situation. Be warm and curious, not salesy. NEVER mention prices, product names, or our catalog.
+- "engaged" replies: continue the conversation naturally. NO prices, NO product specifics. Ask a follow-up question if needed.
+- "wants_offer" emails: open by summarising what you understood about their challenge and how your solution addresses it. THEN present full pricing (offerProductName, offerQuantity, offerUnitPrice, offerSubtotal, offerFpaRate 0.24, offerFpaAmount, offerTotalAmount). Lead with value, not numbers.
+- "counter" emails: acknowledge their concern, adjust price by up to 15% from original (maintain 10% minimum margin), restate the value.
+- "accepted" emails: warm, professional deal confirmation.
+- "declined" emails: respectful closing, leave door open for future.
 
 ALWAYS respond with valid JSON:
 {
   "reasoning": ["step 1", "step 2", "step 3"],
   "decision": "Brief description",
   "data": {
-    "action": "engaged" | "wants_offer" | "accepted" | "counter" | "new_offer" | "declined",
+    "action": "discovery" | "engaged" | "wants_offer" | "accepted" | "counter" | "new_offer" | "declined",
     "customerSentiment": "positive" | "neutral" | "negative",
     "customerIntent": "one sentence summary",
     "replySubject": "email subject",
@@ -189,17 +194,23 @@ ALWAYS respond with valid JSON:
   }
 }`;
 
+    const discoveryNote = dealStatus === 'lead_contacted'
+      ? '\nNOTE: This is their FIRST reply. You MUST use action "discovery". Do not mention pricing or products.'
+      : dealStatus === 'in_pipeline'
+        ? '\nNOTE: Use "wants_offer" only if you already know their specific need, scale, AND timeline from prior exchanges. Otherwise use "discovery".'
+        : '';
+
     const userPrompt = `DEAL CONTEXT:
 - Company: ${lead.company_name}
 - Contact: ${lead.contact_name} (${lead.contact_email})
-- Product/Service: ${currentDeal.product_name || lead.product_interest || 'General inquiry'}
-- Current Pricing (if offer was already sent): €${currentDeal.subtotal} + FPA 24% = €${currentDeal.total_amount}
+- Lead's stated interest: ${lead.product_interest || 'General inquiry'}
+- Current Stage: ${dealStatus}
 - Round: ${roundNumber} of ${maxRounds}
-- Our Previous Outreach Angle: ${currentDeal.sales_notes || 'General cold outreach'}
-
+- Conversation notes so far: ${currentDeal.sales_notes || 'Cold outreach sent'}
+${dealStatus === 'offer_sent' ? `- Offer on the table: €${currentDeal.subtotal} + FPA 24% = €${currentDeal.total_amount}` : ''}
 CUSTOMER'S REPLY:
 "${customerReply}"
-
+${discoveryNote}
 Analyze this reply in stage "${dealStatus}" and decide the next action.`;
 
     console.log(`\n${'='.repeat(50)}`);

@@ -232,6 +232,30 @@ export class WorkflowEngine {
 
     const duration = Date.now() - startTime;
 
+    // ─── DISCOVERY: Asking questions to understand lead's needs ──
+    if (action === 'discovery') {
+      await DealDB.update(dealId, { status: 'in_pipeline', negotiation_round: roundNumber });
+      await emailAgent.deliver({
+        to: lead.contact_email!,
+        subject: reply.subject,
+        body: analysis.data.replyBody,
+        dealId,
+        recipientName: lead.contact_name,
+        emailType: 'follow_up',
+        inReplyTo: reply.messageId,
+        references: reply.references ? `${reply.references} ${reply.messageId}` : reply.messageId,
+      });
+
+      broadcastEvent({
+        type: 'workflow_completed', agent: 'sales', dealId, leadId: deal.lead_id,
+        message: `Discovery phase — understanding lead needs (round ${roundNumber})`,
+        timestamp: new Date().toISOString(),
+      });
+
+      return { status: 'in_pipeline', dealId, action, round: roundNumber, duration,
+        message: `Discovery — learning lead's needs` };
+    }
+
     // ─── ENGAGED: Lead showed interest, keep talking ─────────────
     if (action === 'engaged') {
       await DealDB.update(dealId, { status: 'in_pipeline', negotiation_round: roundNumber });

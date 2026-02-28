@@ -115,7 +115,7 @@ export interface EmailResult extends AgentResponse {
 // Reply analysis result (Sales Agent handling inbound customer replies)
 export interface ReplyAnalysisResult extends AgentResponse {
   data: {
-    action: 'engaged' | 'wants_offer' | 'accepted' | 'counter' | 'new_offer' | 'declined';
+    action: 'discovery' | 'engaged' | 'wants_offer' | 'accepted' | 'counter' | 'new_offer' | 'declined';
     customerSentiment: 'positive' | 'neutral' | 'negative';
     customerIntent: string;
     replySubject: string;

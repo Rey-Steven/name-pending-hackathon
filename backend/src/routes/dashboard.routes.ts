@@ -20,6 +20,11 @@ router.get('/stats', async (_req: Request, res: Response) => {
       EmailDB.all(companyId),
     ]);
 
+    const openDeals = deals.filter(d => ['lead_contacted', 'in_pipeline', 'offer_sent'].includes(d.status ?? ''));
+    const wonDeals = deals.filter(d => d.status === 'closed_won');
+    const lostDeals = deals.filter(d => d.status === 'closed_lost');
+    const closedTotal = wonDeals.length + lostDeals.length;
+
     res.json({
       leads: {
         total: leads.length,
@@ -29,9 +34,19 @@ router.get('/stats', async (_req: Request, res: Response) => {
       },
       deals: {
         total: deals.length,
+        open: openDeals.length,
+        lead_contacted: deals.filter(d => d.status === 'lead_contacted').length,
+        in_pipeline: deals.filter(d => d.status === 'in_pipeline').length,
+        offer_sent: deals.filter(d => d.status === 'offer_sent').length,
+        closed_won: wonDeals.length,
+        closed_lost: lostDeals.length,
+        pipelineValue: openDeals.reduce((sum, d) => sum + (d.total_amount || 0), 0),
+        wonValue: wonDeals.reduce((sum, d) => sum + (d.total_amount || 0), 0),
+        winRate: closedTotal > 0 ? Math.round((wonDeals.length / closedTotal) * 100) : null,
+        totalValue: deals.reduce((sum, d) => sum + (d.total_amount || 0), 0),
+        // legacy
         pending: deals.filter(d => d.status === 'pending').length,
         completed: deals.filter(d => d.status === 'completed').length,
-        totalValue: deals.reduce((sum, d) => sum + (d.total_amount || 0), 0),
       },
       tasks: {
         total: tasks.length,

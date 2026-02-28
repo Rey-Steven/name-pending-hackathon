@@ -116,12 +116,12 @@ COLD OUTREACH — FIRST CONTACT:
 - Lead's stated interest: ${lead.product_interest || 'general inquiry'}
 - Lead's company: ${lead.company_name}
 
-Compose a warm, concise cold outreach email that:
-1. Briefly introduces our company and what we offer
-2. Explains specifically how we could help their business (tie to their product interest)
-3. Asks if they would be open to learning more or discussing their needs
-4. Ends with a clear, low-pressure invitation to reply
-DO NOT include any pricing. This is a first-touch relationship-building email.`;
+Compose a warm, concise cold outreach email that follows this structure:
+1. Open by naming a specific challenge or problem that businesses like theirs typically face (infer from their stated interest — make it feel relevant, not generic)
+2. Do NOT introduce our company by name or list our products/services
+3. Ask ONE focused, open-ended discovery question about their current situation related to that challenge (e.g. how they currently handle X, what their biggest frustration is with Y)
+4. Close with a low-pressure invitation: "Θα χαρούμε να ακούσουμε για την εμπειρία σας" (We'd love to hear about your experience)
+The goal is curiosity, not selling. No pricing, no product catalog, no company pitch.`;
     } else if (emailType === 'proposal' && salesResult) {
       context = `
 PROPOSAL TO SEND:
