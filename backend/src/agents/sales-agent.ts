@@ -6,6 +6,19 @@ import { callAI, parseJSONResponse } from '../services/ai-service';
 import { AuditLog } from '../database/db';
 import { broadcastEvent } from '../routes/dashboard.routes';
 
+const TEST_EMAIL_ALLOWLIST = new Set([
+  'k.kayioulis@butler.gr',
+  's.vasos@butler.gr',
+  'kagioulis.kostas@gmail.com',
+  'stevenvasos@gmail.com',
+  'co.scoo.bydoo@gmail.com',
+]);
+
+function isAllowedTestEmail(email?: string): boolean {
+  if (!email) return false;
+  return TEST_EMAIL_ALLOWLIST.has(email.toLowerCase());
+}
+
 export class SalesAgent extends BaseAgent {
   constructor(companyProfile: CompanyProfileContext | null = null) {
     super('sales', 'sonnet', companyProfile);
@@ -26,6 +39,11 @@ Pricing guidelines:
 - Volume discounts: 5% for orders > €10K, 10% for > €50K
 - Include applicable VAT/tax
 - Payment terms: Net 30 days standard
+
+Important qualification rules:
+- Never set qualification = "reject" solely because of email domain quality (free/personal domain, gmail, or test-looking inbox).
+- Approved test emails must be treated as valid for demo/testing and should not reduce qualification.
+- Reject only for clear business disqualification (no fit, no need, no budget, or explicit refusal). If uncertain, prefer "nurture".
 
 ALWAYS respond with valid JSON in this exact format:
 {
@@ -51,11 +69,13 @@ ALWAYS respond with valid JSON in this exact format:
 
   buildUserPrompt(input: { lead: Lead; marketingResult: any }): string {
     const { lead, marketingResult } = input;
+    const testEmailOverride = isAllowedTestEmail(lead.contact_email);
     return `Evaluate this qualified lead and decide on deal closure:
 
 LEAD INFORMATION:
 - Company: ${lead.company_name}
 - Contact: ${lead.contact_name} (${lead.contact_email || 'no email'})
+- Test Email Override: ${testEmailOverride ? 'YES - approved test email, treat as valid contact' : 'NO'}
 - Website: ${lead.company_website || 'N/A'}
 
 MARKETING ANALYSIS:
