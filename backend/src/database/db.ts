@@ -162,10 +162,18 @@ export interface CompanyProfile {
   raw_scraped_data?: string;
   agent_context_json: string; // JSON string
   setup_complete?: boolean;
-  kad_codes?: string;        // JSON: [{ code: "6201", description: "..." }]
-  help_center_json?: string; // JSON: { intro: string, faqs: [{question, answer}] }
+  kad_codes?: string;              // JSON: [{ code: "6201", description: "..." }]
+  help_center_json?: string;       // JSON: { intro: string, faqs: [{question, answer}] }
+  // Richer AI context fields
+  pricing_model?: string;          // 'one_time' | 'subscription' | 'project_based' | 'hourly' | 'retainer'
+  min_deal_value?: number;         // typical minimum deal value in EUR
+  max_deal_value?: number;         // typical maximum deal value in EUR
+  key_products?: string;           // JSON: [{ name, description, price? }]
+  unique_selling_points?: string;  // free-text bullet points
+  communication_language?: string; // 'Greek' | 'English' | 'Greek and English'
   created_at?: string;
   updated_at?: string;
+  deleted_at?: string | null;
 }
 
 // ─── Lead Operations ──────────────────────────────────────────
@@ -549,16 +557,39 @@ export const AuditLog = {
 };
 
 // ─── Company Profile ──────────────────────────────────────────
+// Multi-company: company_profiles/{auto-id} collection
+// Active company pointer: settings/active.active_company_id
 
 export const CompanyProfileDB = {
+  // Resolve active company
   get: async (): Promise<CompanyProfile | undefined> => {
-    const doc = await fdb().doc('company_profiles/main').get();
+    const settingsDoc = await fdb().doc('settings/active').get();
+    if (!settingsDoc.exists) return undefined;
+    const activeId = settingsDoc.data()!.active_company_id as string | null;
+    if (!activeId) return undefined;
+    const doc = await fdb().collection('company_profiles').doc(activeId).get();
     return docToObj<CompanyProfile>(doc);
+  },
+
+  getAll: async (): Promise<CompanyProfile[]> => {
+    const snap = await fdb().collection('company_profiles').get();
+    return snapToDocs<CompanyProfile>(snap)
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  },
+
+  getActiveId: async (): Promise<string | null> => {
+    const doc = await fdb().doc('settings/active').get();
+    if (!doc.exists) return null;
+    return (doc.data()!.active_company_id as string) || null;
+  },
+
+  setActive: async (id: string): Promise<void> => {
+    await fdb().doc('settings/active').set({ active_company_id: id });
   },
 
   create: async (profile: CompanyProfile): Promise<string> => {
     const now = new Date().toISOString();
-    await fdb().doc('company_profiles/main').set({
+    const ref = await fdb().collection('company_profiles').add({
       name: profile.name,
       website: profile.website || null,
       logo_path: profile.logo_path || null,
@@ -572,22 +603,46 @@ export const CompanyProfileDB = {
       raw_scraped_data: profile.raw_scraped_data || null,
       agent_context_json: profile.agent_context_json,
       setup_complete: profile.setup_complete ?? true,
+      kad_codes: profile.kad_codes || null,
+      help_center_json: profile.help_center_json || null,
+      pricing_model: profile.pricing_model || null,
+      min_deal_value: profile.min_deal_value ?? null,
+      max_deal_value: profile.max_deal_value ?? null,
+      key_products: profile.key_products || null,
+      unique_selling_points: profile.unique_selling_points || null,
+      communication_language: profile.communication_language || 'Greek',
       created_at: now,
       updated_at: now,
+      deleted_at: null,
     });
-    return 'main';
+    // Make the new company active immediately
+    await fdb().doc('settings/active').set({ active_company_id: ref.id });
+    return ref.id;
   },
 
-  update: async (_id: string, updates: Partial<CompanyProfile>): Promise<void> => {
-    const { id: __id, ...rest } = updates as any;
-    await fdb().doc('company_profiles/main').update({
+  update: async (id: string, updates: Partial<CompanyProfile>): Promise<void> => {
+    const { id: _id, deleted_at: _da, ...rest } = updates as any;
+    await fdb().collection('company_profiles').doc(id).update({
       ...rest,
       updated_at: new Date().toISOString(),
     });
   },
 
+  delete: async (id: string): Promise<void> => {
+    await softDeleteDoc('company_profiles', id);
+    // Clear the active pointer if this was the active company
+    const settingsDoc = await fdb().doc('settings/active').get();
+    if (settingsDoc.exists && settingsDoc.data()!.active_company_id === id) {
+      await fdb().doc('settings/active').set({ active_company_id: null });
+    }
+  },
+
   isSetupComplete: async (): Promise<boolean> => {
-    const doc = await fdb().doc('company_profiles/main').get();
-    return doc.exists && doc.data()?.setup_complete === true;
+    const settingsDoc = await fdb().doc('settings/active').get();
+    if (!settingsDoc.exists) return false;
+    const activeId = settingsDoc.data()!.active_company_id as string | null;
+    if (!activeId) return false;
+    const doc = await fdb().collection('company_profiles').doc(activeId).get();
+    return doc.exists && !doc.data()!.deleted_at;
   },
 };

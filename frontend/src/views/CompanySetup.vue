@@ -6,19 +6,18 @@
       <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 text-white">
         <h1 class="text-2xl font-bold">{{ isEditMode ? 'Company Settings' : 'Welcome to AgentFlow' }}</h1>
         <p class="text-blue-100 mt-1">{{ isEditMode ? 'Update your company profile and AI team context' : 'Let\'s set up your AI-powered company in minutes' }}</p>
-        <!-- Progress bar -->
         <div class="mt-4 flex gap-2">
           <div
-            v-for="s in 4"
+            v-for="s in TOTAL_STEPS"
             :key="s"
             class="h-1.5 flex-1 rounded-full transition-all duration-500"
             :class="s <= currentStep ? 'bg-white' : 'bg-blue-400'"
           />
         </div>
-        <div class="mt-2 text-xs text-blue-100">Step {{ currentStep }} of 4</div>
+        <div class="mt-2 text-xs text-blue-100">Step {{ currentStep }} of {{ TOTAL_STEPS }}</div>
       </div>
 
-      <!-- Step 1: Basic Info -->
+      <!-- ─── Step 1: Basic Info ────────────────────────────────── -->
       <div v-if="currentStep === 1" class="p-8">
         <h2 class="text-xl font-semibold text-gray-900 mb-1">Tell us about your company</h2>
         <p class="text-gray-500 text-sm mb-6">We'll use this to tailor your AI team to your business.</p>
@@ -58,9 +57,7 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">
-              Describe your company
-            </label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Describe your company</label>
             <textarea
               v-model="form.userText"
               rows="4"
@@ -72,7 +69,7 @@
 
         <div class="mt-8 flex justify-end">
           <button
-            @click="goToStep2"
+            @click="goToStep(2)"
             :disabled="!form.name"
             class="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
@@ -81,8 +78,143 @@
         </div>
       </div>
 
-      <!-- Step 2: Brand & Documents -->
+      <!-- ─── Step 2: Products & Pricing ───────────────────────── -->
       <div v-if="currentStep === 2" class="p-8">
+        <h2 class="text-xl font-semibold text-gray-900 mb-1">Products & Pricing</h2>
+        <p class="text-gray-500 text-sm mb-6">
+          Help your AI sales and email agents understand what you sell and how you price it.
+        </p>
+
+        <div class="space-y-5">
+          <!-- Pricing model + language row -->
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Pricing Model</label>
+              <select
+                v-model="form.pricingModel"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="">— Select —</option>
+                <option value="one_time">One-time payment</option>
+                <option value="subscription">Subscription / recurring</option>
+                <option value="project_based">Project-based</option>
+                <option value="hourly">Hourly / time & materials</option>
+                <option value="retainer">Retainer</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Email Language</label>
+              <select
+                v-model="form.communicationLanguage"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="Greek">Greek</option>
+                <option value="English">English</option>
+                <option value="Greek and English">Greek and English</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Deal value range -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Typical Deal Value Range (€)</label>
+            <div class="flex items-center gap-3">
+              <input
+                v-model.number="form.minDealValue"
+                type="number"
+                min="0"
+                placeholder="Min (e.g. 500)"
+                class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <span class="text-gray-400 text-sm">to</span>
+              <input
+                v-model.number="form.maxDealValue"
+                type="number"
+                min="0"
+                placeholder="Max (e.g. 50000)"
+                class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <p class="text-xs text-gray-400 mt-1">Used to calibrate offer amounts in the sales pipeline</p>
+          </div>
+
+          <!-- Key products/services -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-sm font-medium text-gray-700">Key Products / Services</label>
+              <button
+                v-if="form.keyProducts.length < 10"
+                @click="addProduct"
+                class="text-xs text-blue-600 hover:text-blue-800 font-medium"
+              >
+                + Add
+              </button>
+            </div>
+
+            <div v-if="form.keyProducts.length === 0" class="text-center py-6 border-2 border-dashed border-gray-200 rounded-xl">
+              <p class="text-sm text-gray-400">No products added yet</p>
+              <button @click="addProduct" class="mt-2 text-sm text-blue-600 font-medium hover:underline">+ Add your first product</button>
+            </div>
+
+            <div v-else class="space-y-3">
+              <div
+                v-for="(product, i) in form.keyProducts"
+                :key="i"
+                class="border border-gray-200 rounded-xl p-3 bg-gray-50"
+              >
+                <div class="flex gap-2 mb-2">
+                  <input
+                    v-model="product.name"
+                    type="text"
+                    placeholder="Product/service name"
+                    class="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <input
+                    v-model.number="product.price"
+                    type="number"
+                    min="0"
+                    placeholder="€ price"
+                    class="w-28 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <button @click="removeProduct(i)" class="text-gray-400 hover:text-red-500 px-1">✕</button>
+                </div>
+                <input
+                  v-model="product.description"
+                  type="text"
+                  placeholder="Brief description (what it does, who it's for)"
+                  class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Unique selling points -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Unique Selling Points</label>
+            <textarea
+              v-model="form.uniqueSellingPoints"
+              rows="3"
+              placeholder="What makes you different? List one per line, e.g.:&#10;- 24/7 dedicated support&#10;- On-premise deployment option&#10;- Fixed-price guarantee"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-sm"
+            />
+            <p class="text-xs text-gray-400 mt-1">Your email agent will weave these into cold outreach and proposals</p>
+          </div>
+        </div>
+
+        <div class="mt-8 flex justify-between">
+          <button @click="goToStep(1)" class="px-4 py-2.5 text-gray-600 hover:text-gray-900 font-medium">← Back</button>
+          <button
+            @click="goToStep(3)"
+            class="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+          >
+            Continue →
+          </button>
+        </div>
+      </div>
+
+      <!-- ─── Step 3: Brand & Documents ────────────────────────── -->
+      <div v-if="currentStep === 3" class="p-8">
         <h2 class="text-xl font-semibold text-gray-900 mb-1">Brand & documents</h2>
         <p class="text-gray-500 text-sm mb-6">
           Upload your logo and any documents (pitch deck, brochures, product overview) to give your AI team deeper context.
@@ -126,7 +258,6 @@
           </div>
           <input ref="docInput" type="file" accept=".pdf,.txt,text/plain,application/pdf" multiple class="hidden" @change="handleDocsSelect" />
 
-          <!-- Document list -->
           <ul v-if="documents.length > 0" class="mt-3 space-y-2">
             <li
               v-for="(doc, i) in documents"
@@ -143,12 +274,7 @@
         </div>
 
         <div class="mt-8 flex justify-between">
-          <button
-            @click="currentStep = 1"
-            class="px-4 py-2.5 text-gray-600 hover:text-gray-900 font-medium transition-colors"
-          >
-            ← Back
-          </button>
+          <button @click="goToStep(2)" class="px-4 py-2.5 text-gray-600 hover:text-gray-900 font-medium">← Back</button>
           <button
             @click="startAnalysis"
             class="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
@@ -158,8 +284,8 @@
         </div>
       </div>
 
-      <!-- Step 3: Analyzing -->
-      <div v-if="currentStep === 3" class="p-8 text-center">
+      <!-- ─── Step 4: Analyzing ─────────────────────────────────── -->
+      <div v-if="currentStep === 4" class="p-8 text-center">
         <div class="text-6xl mb-6 animate-bounce">🤖</div>
         <h2 class="text-xl font-semibold text-gray-900 mb-2">Building your AI team...</h2>
         <p class="text-gray-500 text-sm mb-8">This usually takes 15-30 seconds</p>
@@ -188,18 +314,15 @@
         <div v-if="setupError" class="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg text-left">
           <p class="text-sm font-medium text-red-800">Something went wrong</p>
           <p class="text-xs text-red-600 mt-1">{{ setupError }}</p>
-          <button
-            @click="currentStep = 1"
-            class="mt-3 text-sm text-red-700 hover:underline font-medium"
-          >
+          <button @click="goToStep(1)" class="mt-3 text-sm text-red-700 hover:underline font-medium">
             ← Go back and try again
           </button>
         </div>
       </div>
 
-      <!-- Step 4: Review & Confirm -->
-      <div v-if="currentStep === 4" class="p-8">
-        <div class="flex items-center gap-3 mb-6">
+      <!-- ─── Step 5: Review ────────────────────────────────────── -->
+      <div v-if="currentStep === 5" class="p-8">
+        <div class="flex items-center gap-3 mb-4">
           <span class="text-4xl">🎉</span>
           <div>
             <h2 class="text-xl font-semibold text-gray-900">Your AI team is ready!</h2>
@@ -207,16 +330,16 @@
           </div>
         </div>
 
+        <!-- "New company activated" notice (only when there were other companies before) -->
+        <div v-if="hadExistingCompanies" class="mb-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700">
+          ✅ Saved as a new company profile and set as active. Switch companies anytime from the top-left menu.
+        </div>
+
         <div v-if="companyStore.profile" class="space-y-4">
           <!-- Company overview -->
           <div class="bg-gray-50 rounded-xl p-4">
             <div class="flex items-center gap-3 mb-3">
-              <img
-                v-if="companyStore.logoUrl"
-                :src="companyStore.logoUrl"
-                alt="Logo"
-                class="h-12 w-12 rounded-lg object-contain bg-white border"
-              />
+              <img v-if="companyStore.logoUrl" :src="companyStore.logoUrl" alt="Logo" class="h-12 w-12 rounded-lg object-contain bg-white border" />
               <div v-else class="h-12 w-12 rounded-lg bg-blue-100 flex items-center justify-center text-xl">🏢</div>
               <div>
                 <h3 class="font-semibold text-gray-900">{{ companyStore.profile.name }}</h3>
@@ -237,6 +360,39 @@
                 <span class="text-gray-400">Target Customers</span>
                 <p class="font-medium text-gray-700">{{ companyStore.profile.target_customers }}</p>
               </div>
+              <div v-if="companyStore.profile.pricing_model" class="bg-white rounded-lg p-2">
+                <span class="text-gray-400">Pricing</span>
+                <p class="font-medium text-gray-700">{{ pricingModelLabel(companyStore.profile.pricing_model) }}</p>
+              </div>
+              <div v-if="companyStore.profile.min_deal_value || companyStore.profile.max_deal_value" class="bg-white rounded-lg p-2">
+                <span class="text-gray-400">Deal Range</span>
+                <p class="font-medium text-gray-700">
+                  €{{ companyStore.profile.min_deal_value?.toLocaleString() ?? 0 }} –
+                  €{{ companyStore.profile.max_deal_value?.toLocaleString() ?? '?' }}
+                </p>
+              </div>
+              <div v-if="companyStore.profile.communication_language" class="bg-white rounded-lg p-2">
+                <span class="text-gray-400">Email Language</span>
+                <p class="font-medium text-gray-700">{{ companyStore.profile.communication_language }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Key products chips -->
+          <div v-if="parsedKeyProducts.length > 0" class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-semibold text-gray-700 mb-2">📦 Key Products / Services</p>
+            <div class="space-y-2">
+              <div
+                v-for="p in parsedKeyProducts"
+                :key="p.name"
+                class="bg-white rounded-lg px-3 py-2 text-sm flex items-start justify-between"
+              >
+                <div>
+                  <span class="font-medium text-gray-800">{{ p.name }}</span>
+                  <span v-if="p.price" class="ml-2 text-green-700 font-medium text-xs">€{{ p.price.toLocaleString() }}</span>
+                  <p v-if="p.description" class="text-xs text-gray-500 mt-0.5">{{ p.description }}</p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -244,11 +400,7 @@
           <div v-if="parsedKadCodes.length > 0" class="bg-gray-50 rounded-xl p-4">
             <div class="flex items-center justify-between mb-2">
               <p class="text-sm font-semibold text-gray-700">🏛️ KAD Codes (Greek Business Activity)</p>
-              <button
-                v-if="isEditMode"
-                @click="editingKad = !editingKad"
-                class="text-xs text-blue-600 hover:underline"
-              >
+              <button v-if="isEditMode" @click="editingKad = !editingKad" class="text-xs text-blue-600 hover:underline">
                 {{ editingKad ? 'Cancel' : 'Edit' }}
               </button>
             </div>
@@ -289,15 +441,9 @@
               <span>{{ showAgentContexts ? '▲' : '▼' }}</span>
             </button>
             <div v-if="showAgentContexts" class="mt-2 space-y-2">
-              <div
-                v-for="agent in agentList"
-                :key="agent.key"
-                class="bg-gray-50 rounded-lg p-3"
-              >
+              <div v-for="agent in agentList" :key="agent.key" class="bg-gray-50 rounded-lg p-3">
                 <p class="text-xs font-semibold text-gray-600 mb-1">{{ agent.icon }} {{ agent.label }}</p>
-                <p class="text-xs text-gray-600 leading-relaxed">
-                  {{ getAgentContext(agent.key) }}
-                </p>
+                <p class="text-xs text-gray-600 leading-relaxed">{{ getAgentContext(agent.key) }}</p>
               </div>
             </div>
           </div>
@@ -305,10 +451,7 @@
 
         <div class="mt-8 flex justify-between">
           <div class="flex gap-3">
-            <button
-              @click="currentStep = 1"
-              class="px-4 py-2.5 text-gray-600 hover:text-gray-900 font-medium transition-colors"
-            >
+            <button @click="goToStep(1)" class="px-4 py-2.5 text-gray-600 hover:text-gray-900 font-medium">
               ✏️ Edit
             </button>
             <button
@@ -316,7 +459,6 @@
               @click="triggerRescrape"
               :disabled="isRescraping"
               class="px-4 py-2.5 text-blue-600 hover:text-blue-800 font-medium transition-colors disabled:opacity-50"
-              title="Re-fetch website and regenerate AI contexts"
             >
               {{ isRescraping ? '⏳ Re-analyzing...' : '🔄 Re-analyze AI' }}
             </button>
@@ -340,6 +482,8 @@ import { useRouter } from 'vue-router'
 import { useCompanyStore } from '../stores/company'
 import { companyApi } from '../api/client'
 
+const TOTAL_STEPS = 5
+
 const router = useRouter()
 const companyStore = useCompanyStore()
 
@@ -349,42 +493,25 @@ const setupError = ref<string | null>(null)
 const analysisProgress = ref(-1)
 const isEditMode = ref(false)
 const isRescraping = ref(false)
+const hadExistingCompanies = ref(false)
 
 // KAD codes editing
 const editingKad = ref(false)
 const kadEditText = ref('')
 const savingKad = ref(false)
 
-const parsedKadCodes = computed<Array<{ code: string; description: string }>>(() => {
-  try {
-    return JSON.parse(companyStore.profile?.kad_codes || '[]')
-  } catch {
-    return []
-  }
-})
-
+// Form data
 const form = ref({
   name: '',
   website: '',
   industry: '',
   userText: '',
-})
-
-// Pre-fill form if profile already exists (edit mode)
-onMounted(async () => {
-  if (!companyStore.profile) {
-    await companyStore.fetchProfile()
-  }
-  const p = companyStore.profile
-  if (p) {
-    isEditMode.value = true
-    form.value.name = p.name
-    form.value.website = p.website || ''
-    form.value.industry = p.industry || ''
-    kadEditText.value = p.kad_codes || '[]'
-    // Show the review step directly so they see current state
-    currentStep.value = 4
-  }
+  pricingModel: '',
+  minDealValue: null as number | null,
+  maxDealValue: null as number | null,
+  keyProducts: [] as Array<{ name: string; description: string; price?: number | null }>,
+  uniqueSellingPoints: '',
+  communicationLanguage: 'Greek',
 })
 
 // File state
@@ -393,6 +520,15 @@ const logoPreview = ref<string | null>(null)
 const documents = ref<File[]>([])
 const logoInput = ref<HTMLInputElement | null>(null)
 const docInput = ref<HTMLInputElement | null>(null)
+
+// Computed
+const parsedKadCodes = computed<Array<{ code: string; description: string }>>(() => {
+  try { return JSON.parse(companyStore.profile?.kad_codes || '[]') } catch { return [] }
+})
+
+const parsedKeyProducts = computed<Array<{ name: string; description: string; price?: number }>>(() => {
+  try { return JSON.parse(companyStore.profile?.key_products || '[]') } catch { return [] }
+})
 
 const analysisSteps = [
   { label: 'Fetching website content' },
@@ -403,11 +539,22 @@ const analysisSteps = [
 
 const agentList = [
   { key: 'marketing', icon: '🎯', label: 'Marketing Agent' },
-  { key: 'sales', icon: '💼', label: 'Sales Agent' },
-  { key: 'legal', icon: '⚖️', label: 'Legal Agent' },
-  { key: 'accounting', icon: '📊', label: 'Accounting Agent' },
-  { key: 'email', icon: '📧', label: 'Email Agent' },
+  { key: 'sales',     icon: '💼', label: 'Sales Agent' },
+  { key: 'legal',     icon: '⚖️',  label: 'Legal Agent' },
+  { key: 'accounting',icon: '📊', label: 'Accounting Agent' },
+  { key: 'email',     icon: '📧', label: 'Email Agent' },
 ]
+
+function pricingModelLabel(val?: string) {
+  const map: Record<string, string> = {
+    one_time: 'One-time payment',
+    subscription: 'Subscription / recurring',
+    project_based: 'Project-based',
+    hourly: 'Hourly / T&M',
+    retainer: 'Retainer',
+  }
+  return val ? (map[val] || val) : ''
+}
 
 function getAgentContext(key: string): string {
   const ctx = companyStore.profile?.agent_context_json
@@ -421,9 +568,16 @@ function getStepClass(i: number) {
   return ''
 }
 
-function goToStep2() {
-  if (!form.value.name.trim()) return
-  currentStep.value = 2
+function goToStep(n: number) {
+  currentStep.value = n
+}
+
+// Products helpers
+function addProduct() {
+  form.value.keyProducts.push({ name: '', description: '', price: null })
+}
+function removeProduct(i: number) {
+  form.value.keyProducts.splice(i, 1)
 }
 
 // Logo handling
@@ -431,19 +585,16 @@ function handleLogoSelect(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (file) setLogoFile(file)
 }
-
 function handleLogoDrop(e: DragEvent) {
   const file = e.dataTransfer?.files?.[0]
   if (file && file.type.startsWith('image/')) setLogoFile(file)
 }
-
 function setLogoFile(file: File) {
   logoFile.value = file
   const reader = new FileReader()
   reader.onload = (e) => { logoPreview.value = e.target?.result as string }
   reader.readAsDataURL(file)
 }
-
 function removeLogo() {
   logoFile.value = null
   logoPreview.value = null
@@ -452,53 +603,54 @@ function removeLogo() {
 
 // Document handling
 function handleDocsSelect(e: Event) {
-  const files = Array.from((e.target as HTMLInputElement).files || [])
-  addDocuments(files)
+  addDocuments(Array.from((e.target as HTMLInputElement).files || []))
 }
-
 function handleDocsDrop(e: DragEvent) {
-  const files = Array.from(e.dataTransfer?.files || [])
-  addDocuments(files)
+  addDocuments(Array.from(e.dataTransfer?.files || []))
 }
-
 function addDocuments(files: File[]) {
-  const valid = files.filter(f =>
-    f.type === 'application/pdf' || f.type.startsWith('text/')
-  )
+  const valid = files.filter(f => f.type === 'application/pdf' || f.type.startsWith('text/'))
   documents.value = [...documents.value, ...valid].slice(0, 10)
 }
-
 function removeDoc(index: number) {
   documents.value.splice(index, 1)
 }
 
 async function startAnalysis() {
-  currentStep.value = 3
+  goToStep(4)
   setupError.value = null
   analysisProgress.value = 0
 
-  // Simulate step progression while the API call runs
   const stepTimer = setInterval(() => {
-    if (analysisProgress.value < 2) {
-      analysisProgress.value++
-    }
+    if (analysisProgress.value < 2) analysisProgress.value++
   }, 4000)
 
   try {
-    const formData = new FormData()
-    formData.append('name', form.value.name)
-    if (form.value.website) formData.append('website', form.value.website)
-    if (form.value.industry) formData.append('industry', form.value.industry)
-    if (form.value.userText) formData.append('userText', form.value.userText)
-    if (logoFile.value) formData.append('logo', logoFile.value)
-    documents.value.forEach(doc => formData.append('documents', doc))
+    const fd = new FormData()
+    fd.append('name', form.value.name)
+    if (form.value.website) fd.append('website', form.value.website)
+    if (form.value.industry) fd.append('industry', form.value.industry)
+    if (form.value.userText) fd.append('userText', form.value.userText)
+    if (form.value.pricingModel) fd.append('pricingModel', form.value.pricingModel)
+    if (form.value.minDealValue != null) fd.append('minDealValue', String(form.value.minDealValue))
+    if (form.value.maxDealValue != null) fd.append('maxDealValue', String(form.value.maxDealValue))
+    if (form.value.uniqueSellingPoints) fd.append('uniqueSellingPoints', form.value.uniqueSellingPoints)
+    if (form.value.communicationLanguage) fd.append('communicationLanguage', form.value.communicationLanguage)
 
-    await companyStore.setupCompany(formData)
+    const validProducts = form.value.keyProducts.filter(p => p.name.trim())
+    if (validProducts.length > 0) {
+      fd.append('keyProducts', JSON.stringify(validProducts))
+    }
+
+    if (logoFile.value) fd.append('logo', logoFile.value)
+    documents.value.forEach(doc => fd.append('documents', doc))
+
+    await companyStore.setupCompany(fd)
 
     clearInterval(stepTimer)
     analysisProgress.value = 3
     await new Promise(r => setTimeout(r, 800))
-    currentStep.value = 4
+    goToStep(5)
   } catch (err: any) {
     clearInterval(stepTimer)
     setupError.value = companyStore.error || 'Unknown error occurred'
@@ -511,7 +663,7 @@ async function triggerRescrape() {
     await companyStore.rescrapeProfile()
     kadEditText.value = companyStore.profile?.kad_codes || '[]'
   } catch {
-    // error already set in store
+    // error set in store
   } finally {
     isRescraping.value = false
   }
@@ -520,13 +672,9 @@ async function triggerRescrape() {
 async function saveKadCodes() {
   savingKad.value = true
   try {
-    // Validate JSON
-    JSON.parse(kadEditText.value)
+    JSON.parse(kadEditText.value) // validate
     await companyApi.update({ kad_codes: kadEditText.value })
-    // Update store locally
-    if (companyStore.profile) {
-      companyStore.profile.kad_codes = kadEditText.value
-    }
+    if (companyStore.profile) companyStore.profile.kad_codes = kadEditText.value
     editingKad.value = false
   } catch {
     alert('Invalid JSON — please check the format.')
@@ -538,4 +686,33 @@ async function saveKadCodes() {
 function goToDashboard() {
   router.push('/dashboard')
 }
+
+// On mount: pre-fill if editing an existing company
+onMounted(async () => {
+  await companyStore.fetchAllCompanies()
+  hadExistingCompanies.value = companyStore.companies.length > 0
+
+  if (!companyStore.profile) {
+    await companyStore.fetchProfile()
+  }
+  const p = companyStore.profile
+  if (p) {
+    isEditMode.value = true
+    form.value.name = p.name
+    form.value.website = p.website || ''
+    form.value.industry = p.industry || ''
+    form.value.pricingModel = p.pricing_model || ''
+    form.value.minDealValue = p.min_deal_value ?? null
+    form.value.maxDealValue = p.max_deal_value ?? null
+    form.value.uniqueSellingPoints = p.unique_selling_points || ''
+    form.value.communicationLanguage = p.communication_language || 'Greek'
+    try {
+      form.value.keyProducts = JSON.parse(p.key_products || '[]')
+    } catch {
+      form.value.keyProducts = []
+    }
+    kadEditText.value = p.kad_codes || '[]'
+    goToStep(5)
+  }
+})
 </script>

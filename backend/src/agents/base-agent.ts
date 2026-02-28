@@ -23,20 +23,44 @@ export abstract class BaseAgent {
   // Build a company context header to prepend to system prompts
   protected buildCompanyContextHeader(agentKey: keyof CompanyProfileContext['agentContexts']): string {
     if (!this.companyProfile) return '';
-    const ctx = this.companyProfile.agentContexts[agentKey];
-    return `You are working for ${this.companyProfile.name}.
+    const cp = this.companyProfile;
+    const ctx = cp.agentContexts[agentKey];
 
-COMPANY PROFILE:
-- Industry: ${this.companyProfile.industry || 'Not specified'}
-- Business Model: ${this.companyProfile.business_model || 'Not specified'}
-- Target Customers: ${this.companyProfile.target_customers || 'Not specified'}
-- Products/Services: ${this.companyProfile.products_services || 'Not specified'}
-- Geographic Focus: ${this.companyProfile.geographic_focus || 'Not specified'}
+    const lines: string[] = [
+      `You are working for ${cp.name}.`,
+      '',
+      'COMPANY PROFILE:',
+      `- Industry: ${cp.industry || 'Not specified'}`,
+      `- Business Model: ${cp.business_model || 'Not specified'}`,
+      `- Target Customers: ${cp.target_customers || 'Not specified'}`,
+      `- Products/Services: ${cp.products_services || 'Not specified'}`,
+      `- Geographic Focus: ${cp.geographic_focus || 'Not specified'}`,
+    ];
 
-YOUR DEPARTMENT CONTEXT:
-${ctx}
+    if (cp.pricing_model) lines.push(`- Pricing Model: ${cp.pricing_model}`);
+    if (cp.min_deal_value != null || cp.max_deal_value != null) {
+      lines.push(`- Typical Deal Range: €${cp.min_deal_value ?? 0} – €${cp.max_deal_value ?? '?'}`);
+    }
+    if (cp.communication_language) lines.push(`- Communication Language: ${cp.communication_language}`);
 
-`;
+    if (cp.unique_selling_points) {
+      lines.push('', 'UNIQUE SELLING POINTS:', cp.unique_selling_points);
+    }
+
+    if (cp.key_products) {
+      try {
+        const products = JSON.parse(cp.key_products);
+        const formatted = products.map((p: any) =>
+          `  - ${p.name}${p.price != null ? ` (€${p.price})` : ''}: ${p.description}`
+        ).join('\n');
+        lines.push('', 'KEY PRODUCTS/SERVICES:', formatted);
+      } catch {
+        lines.push('', 'KEY PRODUCTS/SERVICES:', cp.key_products);
+      }
+    }
+
+    lines.push('', 'YOUR DEPARTMENT CONTEXT:', ctx, '');
+    return lines.join('\n');
   }
 
   // Execute the agent: call AI, parse response, log everything

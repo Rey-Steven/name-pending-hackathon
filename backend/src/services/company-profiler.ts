@@ -30,6 +30,13 @@ interface ProfilerInput {
   userProvidedText?: string;
   scrapedWebsiteText?: string;
   documentTexts?: string[];
+  // Richer AI context fields
+  pricingModel?: string;
+  minDealValue?: number;
+  maxDealValue?: number;
+  keyProducts?: string;           // JSON string: [{ name, description, price? }]
+  uniqueSellingPoints?: string;   // free-text
+  communicationLanguage?: string;
 }
 
 const SYSTEM_PROMPT = `You are a business intelligence analyst. Given information about a company from multiple sources, create a comprehensive company profile and generate tailored operational context for each department's AI agent.
@@ -86,6 +93,27 @@ export async function profileCompany(input: ProfilerInput): Promise<CompanyProfi
         sources.push(`\n--- UPLOADED DOCUMENT ${i + 1} ---\n${text}`);
       }
     });
+  }
+
+  // Structured business details
+  if (input.pricingModel) sources.push(`Pricing Model: ${input.pricingModel}`);
+  if (input.minDealValue || input.maxDealValue) {
+    sources.push(`Typical Deal Value Range: €${input.minDealValue ?? 0} – €${input.maxDealValue ?? '?'}`);
+  }
+  if (input.communicationLanguage) sources.push(`Communication Language: ${input.communicationLanguage}`);
+  if (input.uniqueSellingPoints) {
+    sources.push(`\n--- UNIQUE SELLING POINTS ---\n${input.uniqueSellingPoints}`);
+  }
+  if (input.keyProducts) {
+    try {
+      const products = JSON.parse(input.keyProducts);
+      const formatted = products.map((p: any) =>
+        `  - ${p.name}${p.price ? ` (€${p.price})` : ''}: ${p.description}`
+      ).join('\n');
+      sources.push(`\n--- KEY PRODUCTS / SERVICES ---\n${formatted}`);
+    } catch {
+      sources.push(`\n--- KEY PRODUCTS / SERVICES ---\n${input.keyProducts}`);
+    }
   }
 
   const userPrompt = `Analyze the following company information and generate a comprehensive profile with tailored AI agent contexts:\n\n${sources.join('\n')}`;

@@ -39,15 +39,18 @@ export const workflowApi = {
 
 export const companyApi = {
   getSetupStatus: () => api.get('/company/setup-status'),
-  getProfile: () => api.get('/company'),
+  getProfile:     () => api.get('/company'),
   setup: (formData: FormData) =>
     axios.post('/api/company/setup', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
-  update: (data: { name?: string; website?: string; industry?: string; kad_codes?: string }) =>
-    api.put('/company', data),
-  rescrape: () => api.post('/company/rescrape'),
-  getHelpCenter: () => api.get('/company/help-center'),
+  update: (data: Record<string, any>) => api.put('/company', data),
+  rescrape:       () => api.post('/company/rescrape'),
+  getHelpCenter:  () => api.get('/company/help-center'),
+  // Multi-company
+  getAll:         () => api.get('/company/all'),
+  activate:       (id: string) => api.post(`/company/${id}/activate`),
+  deleteCompany:  (id: string) => api.delete(`/company/${id}`),
 }
 
 export const invoicesApi = {

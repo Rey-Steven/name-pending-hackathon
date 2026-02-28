@@ -25,6 +25,13 @@ async function loadCompanyProfile(): Promise<CompanyProfileContext | null> {
       products_services: raw.products_services,
       geographic_focus: raw.geographic_focus,
       agentContexts,
+      kad_codes: raw.kad_codes,
+      pricing_model: raw.pricing_model,
+      min_deal_value: raw.min_deal_value,
+      max_deal_value: raw.max_deal_value,
+      key_products: raw.key_products,
+      unique_selling_points: raw.unique_selling_points,
+      communication_language: raw.communication_language,
     };
   } catch {
     return null;

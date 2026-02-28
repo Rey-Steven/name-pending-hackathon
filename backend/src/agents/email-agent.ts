@@ -174,7 +174,8 @@ Compose a warm check-in email that: thanks the customer for choosing us, asks if
 Compose a professional follow-up email.`;
     }
 
-    return `Compose a professional Greek email:
+    const lang = this.companyProfile?.communication_language || 'Greek';
+    return `Compose a professional email:
 
 RECIPIENT:
 - Company: ${lead.company_name}
@@ -184,7 +185,7 @@ RECIPIENT:
 TYPE: ${emailType}
 ${context}
 
-Write the email in Greek language. Use the EXACT email address "${lead.contact_email}" as the recipientEmail.`;
+Write the email in ${lang} language. Use the EXACT email address "${lead.contact_email}" as the recipientEmail.`;
   }
 
   // ─── Reply analysis mode prompts (from ReplyProcessor) ───

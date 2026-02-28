@@ -184,6 +184,13 @@ export interface CompanyProfileContext {
   geographic_focus?: string;
   agentContexts: AgentCompanyContexts;
   kad_codes?: string;
+  // Richer AI context fields
+  pricing_model?: string;
+  min_deal_value?: number;
+  max_deal_value?: number;
+  key_products?: string;
+  unique_selling_points?: string;
+  communication_language?: string;
 }
 
 // API request bodies
