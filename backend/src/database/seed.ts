@@ -44,17 +44,18 @@ const sampleLeads = [
 export function seedDatabase() {
   console.log('🌱 Seeding database with Greek mock data...\n');
 
-  initializeDatabase();
-
-  // Clear all data and reset auto-increment counters
-  db.exec('DELETE FROM emails');
-  db.exec('DELETE FROM legal_validations');
-  db.exec('DELETE FROM invoices');
-  db.exec('DELETE FROM tasks');
-  db.exec('DELETE FROM deals');
-  db.exec('DELETE FROM leads');
-  db.exec('DELETE FROM audit_log');
+  // Drop all tables to ensure schema is fresh (handles column additions)
+  db.exec('DROP TABLE IF EXISTS emails');
+  db.exec('DROP TABLE IF EXISTS legal_validations');
+  db.exec('DROP TABLE IF EXISTS invoices');
+  db.exec('DROP TABLE IF EXISTS tasks');
+  db.exec('DROP TABLE IF EXISTS deals');
+  db.exec('DROP TABLE IF EXISTS leads');
+  db.exec('DROP TABLE IF EXISTS audit_log');
   db.exec("DELETE FROM sqlite_sequence");
+
+  // Recreate all tables from schema
+  initializeDatabase();
 
   for (const lead of sampleLeads) {
     const id = LeadDB.create(lead);

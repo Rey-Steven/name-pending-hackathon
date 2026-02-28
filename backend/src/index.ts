@@ -56,6 +56,47 @@ app.post('/api/workflow/start', async (req, res) => {
   }
 });
 
+// ─── Auto-poll for customer replies on active deals ───
+const POLL_INTERVAL_MS = 30_000; // 30 seconds
+let polling = false;
+
+async function pollForReplies() {
+  if (polling) return; // skip if previous poll still running
+  polling = true;
+
+  try {
+    const { db } = await import('./database/db');
+    const activeDeals = db.prepare(
+      `SELECT id FROM deals WHERE status IN ('proposal_sent', 'negotiating')`
+    ).all() as Array<{ id: number }>;
+
+    if (activeDeals.length === 0) {
+      polling = false;
+      return;
+    }
+
+    console.log(`\n📡 Auto-polling: checking ${activeDeals.length} active deal(s) for replies...`);
+
+    const { WorkflowEngine } = await import('./services/workflow-engine');
+    const engine = new WorkflowEngine();
+
+    for (const deal of activeDeals) {
+      try {
+        const result = await engine.processReply(deal.id);
+        if (result.status !== 'waiting') {
+          console.log(`  📬 Deal #${deal.id}: ${result.message}`);
+        }
+      } catch (error: any) {
+        console.error(`  ❌ Poll error for deal #${deal.id}:`, error.message);
+      }
+    }
+  } catch (error: any) {
+    console.error('Poll cycle error:', error.message);
+  } finally {
+    polling = false;
+  }
+}
+
 app.listen(PORT, () => {
   console.log(`
 ╔══════════════════════════════════════════════════╗
@@ -65,8 +106,13 @@ app.listen(PORT, () => {
 ║  Agents:                                         ║
 ║  🎯 Marketing  💼 Sales  ⚖️  Legal               ║
 ║  📊 Accounting  📧 Email                         ║
+║                                                  ║
+║  📡 Auto-polling replies every 30s               ║
 ╚══════════════════════════════════════════════════╝
   `);
+
+  // Start polling after a short delay to let server fully initialize
+  setTimeout(() => setInterval(pollForReplies, POLL_INTERVAL_MS), 5_000);
 });
 
 export default app;
