@@ -12,6 +12,7 @@ import tasksRoutes from './routes/tasks.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import companyRoutes from './routes/company.routes';
 import emailsRoutes from './routes/emails.routes';
+import invoicesRoutes from './routes/invoices.routes';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -33,6 +34,7 @@ app.use('/api/tasks', tasksRoutes);
 app.use('/api/emails', emailsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/company', companyRoutes);
+app.use('/api/invoices', invoicesRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

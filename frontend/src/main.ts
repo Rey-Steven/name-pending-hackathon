@@ -10,6 +10,11 @@ import LeadForm from './views/LeadForm.vue'
 import DealView from './views/DealView.vue'
 import CompanySetup from './views/CompanySetup.vue'
 import HelpCenter from './views/HelpCenter.vue'
+import LeadsList from './views/LeadsList.vue'
+import DealsList from './views/DealsList.vue'
+import TasksList from './views/TasksList.vue'
+import InvoicesList from './views/InvoicesList.vue'
+import EmailsView from './views/EmailsView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -17,9 +22,14 @@ const router = createRouter({
     { path: '/', redirect: '/dashboard' },
     { path: '/setup', component: CompanySetup },
     { path: '/dashboard', component: Dashboard },
+    { path: '/leads', component: LeadsList },
     { path: '/leads/new', component: LeadForm },
+    { path: '/deals', component: DealsList },
     { path: '/deals/:id', component: DealView },
     { path: '/help', component: HelpCenter },
+    { path: '/tasks', component: TasksList },
+    { path: '/invoices', component: InvoicesList },
+    { path: '/emails', component: EmailsView },
   ],
 })
 

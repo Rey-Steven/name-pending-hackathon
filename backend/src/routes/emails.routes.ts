@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { EmailDB } from '../database/db';
+import { EmailDB, DealDB, LeadDB, TaskDB } from '../database/db';
 import { fetchInbox, fetchUnread, fetchReplies, sendRealEmail } from '../services/email-transport';
 
 const router = Router();
@@ -33,6 +33,81 @@ router.get('/unread', async (_req: Request, res: Response) => {
     res.json({ count: emails.length, emails });
   } catch (error: any) {
     console.error('Unread fetch error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/emails/threads - Get email threads grouped by deal
+router.get('/threads', async (_req: Request, res: Response) => {
+  try {
+    const allEmails = await EmailDB.all();
+
+    // Group by deal_id
+    const threadMap = new Map<string, any[]>();
+    const orphanEmails: any[] = [];
+
+    for (const email of allEmails) {
+      if (email.deal_id) {
+        if (!threadMap.has(email.deal_id)) {
+          threadMap.set(email.deal_id, []);
+        }
+        threadMap.get(email.deal_id)!.push(email);
+      } else {
+        orphanEmails.push(email);
+      }
+    }
+
+    // Build thread objects with deal/lead/task context
+    const threads = await Promise.all(
+      Array.from(threadMap.entries()).map(async ([dealId, emails]) => {
+        // Sort chronologically (oldest first)
+        emails.sort((a: any, b: any) =>
+          (a.created_at || '').localeCompare(b.created_at || '')
+        );
+
+        const [deal, tasks] = await Promise.all([
+          DealDB.findById(dealId),
+          TaskDB.findByDeal(dealId),
+        ]);
+
+        let lead = null;
+        if (deal?.lead_id) {
+          lead = await LeadDB.findById(deal.lead_id);
+        }
+
+        // Filter to email-related tasks
+        const emailTasks = tasks.filter((t: any) =>
+          t.target_agent === 'email' ||
+          ['send_proposal', 'send_invoice', 'send_confirmation', 'send_follow_up'].includes(t.task_type)
+        );
+
+        const lastEmail = emails[emails.length - 1];
+        const firstEmail = emails[0];
+
+        return {
+          deal_id: dealId,
+          deal_status: deal?.status,
+          lead_name: lead?.company_name,
+          contact_name: lead?.contact_name,
+          contact_email: lead?.contact_email,
+          subject: firstEmail.subject,
+          email_count: emails.length,
+          last_activity: lastEmail.created_at,
+          emails,
+          tasks: emailTasks,
+        };
+      })
+    );
+
+    // Sort threads by last activity (newest first)
+    threads.sort((a, b) => (b.last_activity || '').localeCompare(a.last_activity || ''));
+
+    res.json({
+      count: threads.length,
+      threads,
+      orphan_emails: orphanEmails,
+    });
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });

@@ -23,13 +23,21 @@
               </div>
             </router-link>
           </div>
-          <div class="flex items-center space-x-4">
+          <div class="flex items-center space-x-1">
             <router-link
-              to="/dashboard"
-              class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100"
+              v-for="link in navLinks"
+              :key="link.path"
+              :to="link.path"
+              :class="[
+                'px-3 py-2 rounded-md text-sm font-medium',
+                route.path.startsWith(link.path) && link.path !== '/'
+                  ? 'bg-gray-100 text-gray-900'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              ]"
             >
-              Dashboard
+              {{ link.label }}
             </router-link>
+            <span class="w-px h-6 bg-gray-200 mx-2"></span>
             <router-link
               to="/help"
               class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100"
@@ -70,4 +78,13 @@ const route = useRoute()
 const companyStore = useCompanyStore()
 
 const isSetupPage = computed(() => route.path === '/setup')
+
+const navLinks = [
+  { path: '/dashboard', label: 'Dashboard' },
+  { path: '/leads', label: 'Leads' },
+  { path: '/deals', label: 'Deals' },
+  { path: '/tasks', label: 'Tasks' },
+  { path: '/invoices', label: 'Invoices' },
+  { path: '/emails', label: 'Emails' },
+]
 </script>

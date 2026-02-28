@@ -114,6 +114,7 @@ export class WorkflowEngine {
             taskData.parsedInput.emailType || 'proposal',
             {
               dealId: taskData.parsedInput.dealId,
+              taskId: task.id!,
               salesResult: taskData.parsedInput.salesResult,
             }
           );
@@ -222,6 +223,23 @@ export class WorkflowEngine {
     console.log(`     Subject: ${reply.subject}`);
     console.log(`     Preview: ${reply.body.slice(0, 150)}...`);
 
+    // Store inbound customer reply in DB (deduplicate by message_id)
+    const existingInbound = await EmailDB.findByMessageId(reply.messageId);
+    if (!existingInbound) {
+      await EmailDB.create({
+        deal_id: dealId,
+        recipient_email: process.env.GMAIL_USER || '',
+        recipient_name: 'AgentFlow',
+        sender_email: reply.from,
+        subject: reply.subject,
+        body: reply.body,
+        email_type: 'follow_up',
+        direction: 'inbound',
+        message_id: reply.messageId,
+        status: 'sent',
+      });
+    }
+
     const roundNumber = (deal.negotiation_round || 0) + 1;
 
     const negotiationResult = await salesAgent.negotiateReply({
@@ -257,6 +275,7 @@ export class WorkflowEngine {
         subject: negotiationResult.data.responseSubject,
         body: negotiationResult.data.responseBody,
         email_type: 'confirmation',
+        direction: 'outbound',
         status: 'sent',
       });
 
@@ -307,6 +326,8 @@ export class WorkflowEngine {
         subject: negotiationResult.data.responseSubject,
         body: negotiationResult.data.responseBody,
         email_type: 'follow_up' as any,
+        direction: 'outbound',
+        message_id: sendResult.messageId,
         status: sendResult.sent ? 'sent' : 'failed',
         error_message: sendResult.error,
       });
@@ -362,6 +383,8 @@ export class WorkflowEngine {
       subject: negotiationResult.data.responseSubject,
       body: negotiationResult.data.responseBody,
       email_type: 'follow_up' as any,
+      direction: 'outbound',
+      message_id: sendResult.messageId,
       status: sendResult.sent ? 'sent' : 'failed',
       error_message: sendResult.error,
     });
@@ -445,6 +468,7 @@ export class WorkflowEngine {
           taskData.parsedInput.emailType || 'invoice',
           {
             dealId: taskData.parsedInput.dealId,
+            taskId: task.id!,
             invoiceData: taskData.parsedInput.invoiceData,
             invoiceNumber: taskData.parsedInput.invoiceNumber,
             invoiceId: taskData.parsedInput.invoiceId,

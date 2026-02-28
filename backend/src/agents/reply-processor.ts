@@ -125,6 +125,8 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
       subject: result.data.subject,
       body: result.data.body,
       email_type: 'follow_up',
+      direction: 'outbound',
+      message_id: sendResult.messageId,
       status: sendResult.sent ? 'sent' : 'failed',
       error_message: sendResult.error,
     });

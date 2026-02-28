@@ -50,6 +50,19 @@ export const companyApi = {
   getHelpCenter: () => api.get('/company/help-center'),
 }
 
+export const invoicesApi = {
+  getAll: () => api.get('/invoices'),
+  getById: (id: string) => api.get(`/invoices/${id}`),
+}
+
+export const emailsApi = {
+  getAll: () => api.get('/emails'),
+  getThreads: () => api.get('/emails/threads'),
+  getInbox: (limit?: number) => api.get('/emails/inbox', { params: limit ? { limit } : {} }),
+  getUnread: () => api.get('/emails/unread'),
+  getReplies: () => api.get('/emails/replies'),
+}
+
 // SSE connection for real-time events
 export function connectToEvents(onEvent: (event: any) => void): EventSource {
   const eventSource = new EventSource('/api/dashboard/events')

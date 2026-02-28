@@ -105,6 +105,9 @@ export interface Email {
   subject: string;
   body: string;
   email_type?: 'proposal' | 'invoice' | 'confirmation' | 'follow_up' | 'satisfaction';
+  direction?: 'outbound' | 'inbound';
+  message_id?: string;
+  sender_email?: string;
   status?: 'pending' | 'sent' | 'failed';
   error_message?: string;
   created_at?: string;
@@ -374,6 +377,9 @@ export const EmailDB = {
       subject: email.subject,
       body: email.body,
       email_type: email.email_type || null,
+      direction: email.direction || 'outbound',
+      message_id: email.message_id || null,
+      sender_email: email.sender_email || null,
       status: email.status || 'pending',
       error_message: email.error_message || null,
       created_at: now,
@@ -421,6 +427,23 @@ export const EmailDB = {
         created_at: (d.data().created_at as string) || '',
       }));
     return docs.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  },
+
+  findByDeal: async (dealId: string): Promise<Email[]> => {
+    const snap = await fdb().collection('emails').where('deal_id', '==', dealId).get();
+    const emails = snapToDocs<Email>(snap);
+    return emails.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+  },
+
+  findByMessageId: async (messageId: string): Promise<Email | undefined> => {
+    if (!messageId) return undefined;
+    const snap = await fdb().collection('emails')
+      .where('message_id', '==', messageId)
+      .where('direction', '==', 'inbound')
+      .limit(1)
+      .get();
+    if (snap.empty) return undefined;
+    return { id: snap.docs[0].id, ...snap.docs[0].data() } as Email;
   },
 };
 

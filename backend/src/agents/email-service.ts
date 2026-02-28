@@ -118,7 +118,7 @@ Write the email in Greek language. Use the EXACT email address "${lead.contact_e
   async sendEmail(
     leadId: string,
     emailType: 'proposal' | 'confirmation' | 'invoice' | 'follow_up' | 'satisfaction',
-    context: { dealId?: string; salesResult?: any; invoiceData?: any; invoiceNumber?: string; invoiceId?: string }
+    context: { dealId?: string; taskId?: string; salesResult?: any; invoiceData?: any; invoiceNumber?: string; invoiceId?: string }
   ): Promise<EmailResult> {
     const lead = await LeadDB.findById(leadId);
     if (!lead) throw new Error(`Lead ${leadId} not found`);
@@ -138,6 +138,7 @@ Write the email in Greek language. Use the EXACT email address "${lead.contact_e
     });
 
     await EmailDB.create({
+      task_id: context.taskId,
       deal_id: context.dealId,
       invoice_id: context.invoiceId,
       recipient_email: recipientEmail,
@@ -145,6 +146,8 @@ Write the email in Greek language. Use the EXACT email address "${lead.contact_e
       subject: result.data.subject,
       body: result.data.body,
       email_type: emailType,
+      direction: 'outbound',
+      message_id: sendResult.messageId,
       status: sendResult.sent ? 'sent' : 'failed',
       error_message: sendResult.error,
     });
