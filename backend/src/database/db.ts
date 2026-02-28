@@ -623,19 +623,18 @@ export const MarketResearchDB = {
     const snap = await fdb().collection('market_research')
       .where('company_id', '==', companyId)
       .where('status', '==', 'completed')
-      .orderBy('created_at', 'desc')
-      .limit(1)
       .get();
-    const docs = snapToDocs<MarketResearch>(snap);
+    const docs = snapToDocs<MarketResearch>(snap)
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     return docs[0];
   },
 
   all: async (companyId: string): Promise<MarketResearch[]> => {
     const snap = await fdb().collection('market_research')
       .where('company_id', '==', companyId)
-      .orderBy('created_at', 'desc')
       .get();
-    return snapToDocs<MarketResearch>(snap);
+    return snapToDocs<MarketResearch>(snap)
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
   },
 
   delete: async (id: string): Promise<void> => softDeleteDoc('market_research', id),
@@ -701,9 +700,9 @@ export const SocialContentDB = {
   all: async (companyId: string): Promise<SocialContent[]> => {
     const snap = await fdb().collection('social_content')
       .where('company_id', '==', companyId)
-      .orderBy('created_at', 'desc')
       .get();
-    return snapToDocs<SocialContent>(snap);
+    return snapToDocs<SocialContent>(snap)
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
   },
 
   findByResearch: async (researchId: string): Promise<SocialContent[]> => {
