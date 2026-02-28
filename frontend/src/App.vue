@@ -76,7 +76,7 @@
               </div>
               <div class="border-t border-gray-100 p-2">
                 <router-link
-                  to="/setup"
+                  to="/setup?new=1"
                   @click="switcherOpen = false"
                   class="flex items-center space-x-2 w-full px-3 py-2 rounded-lg text-sm text-blue-600 hover:bg-blue-50 font-medium transition-colors"
                 >

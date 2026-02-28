@@ -478,13 +478,14 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useCompanyStore } from '../stores/company'
 import { companyApi } from '../api/client'
 
 const TOTAL_STEPS = 5
 
 const router = useRouter()
+const route = useRoute()
 const companyStore = useCompanyStore()
 
 const currentStep = ref(1)
@@ -688,9 +689,13 @@ function goToDashboard() {
 }
 
 // On mount: pre-fill if editing an existing company
+// If ?new=1 is present, start fresh (blank form) regardless of existing profile
 onMounted(async () => {
   await companyStore.fetchAllCompanies()
   hadExistingCompanies.value = companyStore.companies.length > 0
+
+  // Creating a new company — skip pre-fill and stay on step 1
+  if (route.query.new === '1') return
 
   if (!companyStore.profile) {
     await companyStore.fetchProfile()

@@ -9,6 +9,12 @@ import { profileCompany } from '../services/company-profiler';
 
 const router = Router();
 
+// Ensure upload directories exist (multer does not auto-create them)
+[
+  path.join(__dirname, '../../uploads/logos'),
+  path.join(__dirname, '../../uploads/documents'),
+].forEach(dir => fs.mkdirSync(dir, { recursive: true }));
+
 // Configure multer storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
