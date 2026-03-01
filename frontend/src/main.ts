@@ -19,6 +19,7 @@ import Settings from './views/Settings.vue'
 import MarketResearchView from './views/MarketResearchView.vue'
 import SocialContentView from './views/SocialContentView.vue'
 import LegalContracts from './views/LegalContracts.vue'
+import GemiCompanies from './views/GemiCompanies.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -26,6 +27,7 @@ const router = createRouter({
     { path: '/', redirect: '/setup' },
     { path: '/setup', component: CompanySetup },
     { path: '/settings', component: Settings },
+    { path: '/gemi-companies', component: GemiCompanies },
     { path: '/help', component: HelpCenter },
     {
       path: '/company/:companyId',
@@ -59,7 +61,7 @@ let setupChecked = false
 
 router.beforeEach(async (to) => {
   // Always allow access to setup, settings, and help pages
-  if (to.path === '/setup' || to.path.startsWith('/setup') || to.path === '/settings' || to.path === '/help') return true
+  if (to.path === '/setup' || to.path.startsWith('/setup') || to.path === '/settings' || to.path === '/help' || to.path === '/gemi-companies') return true
 
   const companyStore = useCompanyStore()
 

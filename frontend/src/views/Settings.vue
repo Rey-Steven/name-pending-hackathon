@@ -91,13 +91,100 @@
       </div>
 
     </form>
+
+    <!-- GEMI Scraper (outside the settings form — separate controls) -->
+    <div class="max-w-2xl mt-8">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-semibold text-gray-900">GEMI Company Scraper</h2>
+            <p class="text-sm text-gray-500 mt-0.5">Enumerates companies from the Greek Business Registry (GEMI). Runs daily.</p>
+          </div>
+          <span
+            :class="[
+              'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
+              gemi.is_running
+                ? 'bg-green-100 text-green-800'
+                : gemi.status === 'stopped'
+                  ? 'bg-yellow-100 text-yellow-800'
+                  : 'bg-gray-100 text-gray-700',
+            ]"
+          >
+            {{ gemi.is_running ? 'Running' : gemi.status === 'stopped' ? 'Stopped' : 'Idle' }}
+          </span>
+        </div>
+
+        <div class="px-6 py-4 space-y-4">
+          <!-- Stats grid -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div class="text-center">
+              <p class="text-2xl font-bold text-gray-900">{{ gemi.total_companies_found.toLocaleString() }}</p>
+              <p class="text-xs text-gray-500 mt-0.5">Total found</p>
+            </div>
+            <div class="text-center">
+              <p class="text-2xl font-bold text-gray-900">{{ gemi.companies_found_this_run.toLocaleString() }}</p>
+              <p class="text-xs text-gray-500 mt-0.5">This run</p>
+            </div>
+            <div class="text-center">
+              <p class="text-2xl font-bold text-gray-900">{{ gemi.current_company_id?.toLocaleString() || '—' }}</p>
+              <p class="text-xs text-gray-500 mt-0.5">Current ID</p>
+            </div>
+            <div class="text-center">
+              <p class="text-2xl font-bold text-gray-900">{{ gemi.consecutive_misses }}</p>
+              <p class="text-xs text-gray-500 mt-0.5">Consecutive misses</p>
+            </div>
+          </div>
+
+          <!-- Last run info -->
+          <div v-if="gemi.last_run_completed_at" class="text-xs text-gray-500">
+            Last completed: {{ new Date(gemi.last_run_completed_at).toLocaleString() }}
+          </div>
+          <div v-if="gemi.last_error" class="text-xs text-red-500">
+            Last error: {{ gemi.last_error }}
+          </div>
+
+          <!-- Controls -->
+          <div class="flex items-center gap-3 pt-2 border-t border-gray-100">
+            <button
+              v-if="!gemi.is_running"
+              @click="startGemi"
+              :disabled="gemiLoading"
+              class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              {{ gemiLoading ? 'Starting…' : 'Start scraper' }}
+            </button>
+            <button
+              v-else
+              @click="stopGemi"
+              :disabled="gemiLoading"
+              class="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+            >
+              {{ gemiLoading ? 'Stopping…' : 'Stop scraper' }}
+            </button>
+            <button
+              @click="refreshGemiStatus"
+              :disabled="gemiLoading"
+              class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors"
+            >
+              Refresh
+            </button>
+            <router-link
+              to="/gemi-companies"
+              class="ml-auto px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+            >
+              View scraped companies →
+            </router-link>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, defineComponent, h } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, defineComponent, h } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
-import { settingsApi } from '../api/client'
+import { settingsApi, gemiApi } from '../api/client'
 
 // ─── Inline sub-component for a setting row ────────────────────
 
@@ -143,6 +230,56 @@ const saving = ref(false)
 const saved = ref(false)
 const error = ref('')
 
+// ─── GEMI Scraper State ──────────────────────────────────────
+
+const gemi = reactive({
+  status: 'idle' as string,
+  is_running: false,
+  total_companies_found: 0,
+  companies_found_this_run: 0,
+  current_company_id: null as number | null,
+  consecutive_misses: 0,
+  last_run_completed_at: null as string | null,
+  last_error: null as string | null,
+})
+
+const gemiLoading = ref(false)
+let gemiPollTimer: ReturnType<typeof setInterval> | null = null
+
+async function refreshGemiStatus() {
+  try {
+    const { data } = await gemiApi.getStatus()
+    Object.assign(gemi, data)
+  } catch {
+    // silent
+  }
+}
+
+async function startGemi() {
+  gemiLoading.value = true
+  try {
+    await gemiApi.trigger()
+    await refreshGemiStatus()
+  } catch {
+    // silent
+  } finally {
+    gemiLoading.value = false
+  }
+}
+
+async function stopGemi() {
+  gemiLoading.value = true
+  try {
+    await gemiApi.stop()
+    // Give it a moment to actually stop
+    setTimeout(refreshGemiStatus, 2000)
+  } catch {
+    // silent
+  } finally {
+    gemiLoading.value = false
+  }
+}
+
 // ─── Load ──────────────────────────────────────────────────────
 
 onMounted(async () => {
@@ -152,6 +289,14 @@ onMounted(async () => {
   } catch {
     error.value = 'Failed to load settings'
   }
+
+  // Load GEMI status and auto-refresh every 10s
+  refreshGemiStatus()
+  gemiPollTimer = setInterval(refreshGemiStatus, 10_000)
+})
+
+onUnmounted(() => {
+  if (gemiPollTimer) clearInterval(gemiPollTimer)
 })
 
 // ─── Save ──────────────────────────────────────────────────────

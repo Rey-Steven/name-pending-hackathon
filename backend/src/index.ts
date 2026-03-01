@@ -17,6 +17,8 @@ import settingsRoutes from './routes/settings.routes';
 import { AppSettingsDB } from './database/db';
 import researchRoutes from './routes/research.routes';
 import contentRoutes from './routes/content.routes';
+import gemiRoutes from './routes/gemi.routes';
+import { pollGemiScraper } from './services/gemi-scraper';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -52,6 +54,7 @@ app.use('/api/invoices', invoicesRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/research', researchRoutes);
 app.use('/api/content', contentRoutes);
+app.use('/api/gemi', gemiRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -145,6 +148,7 @@ app.listen(PORT, () => {
     setInterval(pollSatisfactionEmails, 24 * 3_600_000); // every 24 hours
     setInterval(pollMarketResearch, 24 * 3_600_000);     // every 24 hours
     setInterval(pollContentCreation, 24 * 3_600_000);    // every 24 hours
+    setInterval(pollGemiScraper, 24 * 3_600_000);        // every 24 hours
     // Run lifecycle pollers once immediately on startup
     pollStaleLeads();
     pollLostDeals();
@@ -152,6 +156,8 @@ app.listen(PORT, () => {
     pollMarketResearch();
     // Delay content creation to give research time to complete
     setTimeout(pollContentCreation, 5 * 60_000);
+    // Start GEMI scraper
+    pollGemiScraper();
   }, 5_000);
 });
 

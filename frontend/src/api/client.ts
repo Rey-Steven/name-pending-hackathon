@@ -114,6 +114,22 @@ export const contentApi = {
   update: (id: string, data: { post_text?: string; hashtags?: string[] }) => api.patch(`/content/${id}`, data),
 }
 
+export const gemiApi = {
+  getStatus: () => api.get('/gemi/status'),
+  trigger: () => api.post('/gemi/trigger'),
+  stop: () => api.post('/gemi/stop'),
+  getCount: () => api.get('/gemi/companies/count'),
+  listCompanies: (params?: {
+    limit?: number
+    startAfter?: string
+    search?: string
+    status?: string
+    legalForm?: string
+    chamberName?: string
+  }) => api.get('/gemi/companies', { params }),
+  getCompany: (id: string) => api.get(`/gemi/companies/${id}`),
+}
+
 // SSE connection for real-time events
 export function connectToEvents(onEvent: (event: any) => void): EventSource {
   const eventSource = new EventSource('/api/dashboard/events')

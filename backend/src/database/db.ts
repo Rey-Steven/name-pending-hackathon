@@ -986,3 +986,180 @@ export const PendingOfferDB = {
     });
   },
 };
+
+// ─── GEMI Companies (global, not company-scoped) ─────────────
+
+export interface GemiCompany {
+  id?: string;
+  gemi_number: string;
+  company_id_num: number;
+  chamber_id: number;
+  branch_code: string;
+  name: string;
+  title?: string;
+  afm?: string;
+  chamber_name?: string;
+  status?: string;
+  foundation_date?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  legal_form?: string;
+  kad_primary?: string;    // JSON: { code, description }
+  kad_secondary?: string;  // JSON: [{ code, description }]
+  raw_response: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export const GemiCompanyDB = {
+  create: async (company: GemiCompany): Promise<string> => {
+    const now = new Date().toISOString();
+    const ref = await fdb().collection('gemi_companies').add({
+      gemi_number: company.gemi_number,
+      company_id_num: company.company_id_num,
+      chamber_id: company.chamber_id,
+      branch_code: company.branch_code,
+      name: company.name,
+      title: company.title || null,
+      afm: company.afm || null,
+      chamber_name: company.chamber_name || null,
+      status: company.status || null,
+      foundation_date: company.foundation_date || null,
+      phone: company.phone || null,
+      email: company.email || null,
+      address: company.address || null,
+      legal_form: company.legal_form || null,
+      kad_primary: company.kad_primary || null,
+      kad_secondary: company.kad_secondary || null,
+      raw_response: company.raw_response,
+      created_at: now,
+      updated_at: now,
+    });
+    return ref.id;
+  },
+
+  findByGemiNumber: async (gemiNumber: string): Promise<GemiCompany | undefined> => {
+    const snap = await fdb().collection('gemi_companies')
+      .where('gemi_number', '==', gemiNumber)
+      .limit(1)
+      .get();
+    if (snap.empty) return undefined;
+    const doc = snap.docs[0];
+    return { id: doc.id, ...doc.data() } as GemiCompany;
+  },
+
+  getHighestCompanyId: async (): Promise<number | null> => {
+    const snap = await fdb().collection('gemi_companies')
+      .orderBy('company_id_num', 'desc')
+      .limit(1)
+      .get();
+    if (snap.empty) return null;
+    return snap.docs[0].data().company_id_num as number;
+  },
+
+  count: async (): Promise<number> => {
+    const snap = await fdb().collection('gemi_companies').count().get();
+    return snap.data().count;
+  },
+
+  list: async (options: {
+    limit?: number;
+    startAfter?: string;        // document ID for cursor-based pagination
+    status?: string;
+    legalForm?: string;
+    chamberName?: string;
+    search?: string;            // client-side filter on name/afm (Firestore has no LIKE)
+  } = {}): Promise<{ companies: GemiCompany[]; lastId: string | null }> => {
+    const limit = options.limit || 50;
+    let query: FirebaseFirestore.Query = fdb().collection('gemi_companies')
+      .orderBy('company_id_num', 'desc');
+
+    // Firestore equality filters (these use indexes)
+    if (options.status) {
+      query = query.where('status', '==', options.status);
+    }
+    if (options.legalForm) {
+      query = query.where('legal_form', '==', options.legalForm);
+    }
+    if (options.chamberName) {
+      query = query.where('chamber_name', '==', options.chamberName);
+    }
+
+    // Cursor-based pagination
+    if (options.startAfter) {
+      const cursorDoc = await fdb().collection('gemi_companies').doc(options.startAfter).get();
+      if (cursorDoc.exists) {
+        query = query.startAfter(cursorDoc);
+      }
+    }
+
+    // Fetch extra to allow client-side text filtering
+    const fetchLimit = options.search ? limit * 5 : limit;
+    const snap = await query.limit(fetchLimit).get();
+
+    let companies = snap.docs.map(d => {
+      const data = d.data();
+      // Exclude raw_response from list results to keep payloads small
+      const { raw_response, ...rest } = data;
+      return { id: d.id, ...rest } as GemiCompany;
+    });
+
+    // Client-side text search (Firestore has no full-text search)
+    if (options.search) {
+      const q = options.search.toLowerCase();
+      companies = companies.filter(c =>
+        c.name?.toLowerCase().includes(q) ||
+        c.afm?.includes(q) ||
+        c.gemi_number?.includes(q) ||
+        c.title?.toLowerCase().includes(q)
+      );
+      companies = companies.slice(0, limit);
+    }
+
+    const lastId = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1].id : null;
+    return { companies, lastId };
+  },
+
+  getById: async (id: string): Promise<GemiCompany | undefined> => {
+    const doc = await fdb().collection('gemi_companies').doc(id).get();
+    if (!doc.exists) return undefined;
+    return { id: doc.id, ...doc.data() } as GemiCompany;
+  },
+};
+
+// ─── GEMI Scraper State (singleton at settings/gemi_scraper) ──
+
+export interface GemiScraperState {
+  last_company_id: number;
+  last_run_started_at: string | null;
+  last_run_completed_at: string | null;
+  status: 'idle' | 'running' | 'stopped';
+  total_companies_found: number;
+  companies_found_this_run: number;
+  consecutive_misses: number;
+  last_error?: string;
+  current_company_id?: number;
+}
+
+const DEFAULT_GEMI_STATE: GemiScraperState = {
+  last_company_id: 1889646,
+  last_run_started_at: null,
+  last_run_completed_at: null,
+  status: 'idle',
+  total_companies_found: 0,
+  companies_found_this_run: 0,
+  consecutive_misses: 0,
+};
+
+export const GemiScraperStateDB = {
+  get: async (): Promise<GemiScraperState> => {
+    const doc = await fdb().doc('settings/gemi_scraper').get();
+    if (!doc.exists) return { ...DEFAULT_GEMI_STATE };
+    return { ...DEFAULT_GEMI_STATE, ...doc.data() } as GemiScraperState;
+  },
+
+  update: async (updates: Partial<GemiScraperState>): Promise<void> => {
+    await fdb().doc('settings/gemi_scraper').set(updates, { merge: true });
+  },
+};

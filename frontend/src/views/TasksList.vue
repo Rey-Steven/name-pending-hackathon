@@ -30,17 +30,17 @@
     <!-- Table -->
     <div v-if="loading" class="text-center py-12 text-gray-400">Loading tasks...</div>
     <div v-else-if="filteredTasks.length" class="bg-white rounded-lg shadow overflow-x-auto">
-      <table class="w-full min-w-full">
+      <table class="w-full min-w-full table-fixed">
         <thead class="bg-gray-50">
           <tr>
             <th class="w-8 px-2 py-3"></th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Target</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Completed</th>
+            <th class="w-[30%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+            <th class="w-[12%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+            <th class="w-[10%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source</th>
+            <th class="w-[10%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Target</th>
+            <th class="w-[10%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+            <th class="w-[12%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+            <th class="w-[12%] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Completed</th>
           </tr>
         </thead>
         <tbody class="divide-y">
@@ -61,7 +61,7 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                 </svg>
               </td>
-              <td class="px-4 py-3 font-medium text-gray-900">{{ task.title }}</td>
+              <td class="px-4 py-3 font-medium text-gray-900 truncate" :title="task.title">{{ task.title }}</td>
               <td class="px-4 py-3">
                 <span class="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700">
                   {{ task.task_type }}
