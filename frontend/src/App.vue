@@ -156,12 +156,6 @@
             >
               Help
             </router-link>
-            <router-link
-              :to="companyPath('leads/new')"
-              class="px-4 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-            >
-              + New Lead
-            </router-link>
             <!-- Gear icon dropdown -->
             <div class="relative" ref="settingsRef">
               <button
@@ -206,7 +200,47 @@
 
     <!-- Main content -->
     <main :class="isSetupPage ? '' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'">
-      <router-view :key="isSetupPage ? 'setup' : (String(route.params.companyId || 'default'))" />
+      <!-- Loading state during initial check -->
+      <div
+        v-if="!companyStore.setupChecked && !isSetupPage"
+        class="flex items-center justify-center py-32"
+      >
+        <div class="text-center">
+          <div class="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p class="text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+
+      <!-- Backend unreachable overlay -->
+      <div
+        v-else-if="companyStore.backendReachable === false && !isSetupPage"
+        class="flex flex-col items-center justify-center py-32"
+      >
+        <div class="text-center max-w-md">
+          <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-6">
+            <svg class="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+            </svg>
+          </div>
+          <h2 class="text-xl font-semibold text-gray-900 mb-2">Server Unreachable</h2>
+          <p class="text-gray-500 mb-6">
+            Unable to connect to the backend server. Please make sure the server is running and try again.
+          </p>
+          <button
+            @click="retryConnection"
+            :disabled="retrying"
+            class="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            {{ retrying ? 'Retrying...' : 'Retry Connection' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Normal content -->
+      <router-view
+        v-else
+        :key="isSetupPage ? 'setup' : (String(route.params.companyId || 'default'))"
+      />
     </main>
 
     <ToastContainer />
@@ -223,7 +257,10 @@ const route = useRoute()
 const router = useRouter()
 const companyStore = useCompanyStore()
 
-const isSetupPage = computed(() => route.path === '/setup' || route.path.startsWith('/setup'))
+const isSetupPage = computed(() =>
+  route.path === '/setup' || route.path.startsWith('/setup') ||
+  route.path === '/select-company'
+)
 const switcherOpen = ref(false)
 const switcherRef = ref<HTMLElement | null>(null)
 const settingsOpen = ref(false)
@@ -236,8 +273,27 @@ const companyInitials = computed(() => {
 
 function companyPath(subpath: string): string {
   const id = companyStore.activeCompanyId
-  if (!id) return '/setup'
+  if (!id) return companyStore.companies.length > 0 ? '/select-company' : '/setup'
   return `/company/${id}/${subpath}`
+}
+
+const retrying = ref(false)
+
+async function retryConnection() {
+  retrying.value = true
+  const isSetup = await companyStore.retryConnection()
+  retrying.value = false
+  if (companyStore.backendReachable) {
+    await companyStore.fetchAllCompanies()
+    if (isSetup && companyStore.activeCompanyId) {
+      await companyStore.fetchProfile()
+      router.push(`/company/${companyStore.activeCompanyId}/dashboard`)
+    } else if (companyStore.companies.length > 0) {
+      router.push('/select-company')
+    } else {
+      router.push('/setup')
+    }
+  }
 }
 
 function toggleSwitcher() {

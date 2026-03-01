@@ -24,12 +24,14 @@ import GemiCompanies from './views/GemiCompanies.vue'
 import ElorusContactsList from './views/ElorusContactsList.vue'
 import ElorusProductsList from './views/ElorusProductsList.vue'
 import ElorusOffersList from './views/ElorusOffersList.vue'
+import CompanySelect from './views/CompanySelect.vue'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: '/setup' },
+    { path: '/', component: { template: '<div />' } },
     { path: '/setup', component: CompanySetup },
+    { path: '/select-company', component: CompanySelect },
     { path: '/settings', component: Settings },
     { path: '/gemi-companies', component: GemiCompanies },
     { path: '/help', component: HelpCenter },
@@ -66,28 +68,39 @@ app.use(router)
 // Navigation guard: redirect to /setup if company is not configured
 import { useCompanyStore } from './stores/company'
 
-let setupChecked = false
-
 router.beforeEach(async (to) => {
-  // Always allow access to setup, settings, and help pages
-  if (to.path === '/setup' || to.path.startsWith('/setup') || to.path === '/settings' || to.path === '/help' || to.path === '/gemi-companies') return true
+  // Always allow access to setup, settings, help, and company select pages
+  const openPaths = ['/setup', '/settings', '/help', '/gemi-companies', '/select-company']
+  if (openPaths.some(p => to.path === p || to.path.startsWith(p + '/'))) return true
 
   const companyStore = useCompanyStore()
 
   // One-time setup check on first navigation
-  if (!setupChecked) {
+  if (!companyStore.setupChecked) {
     const isSetup = await companyStore.checkSetupStatus()
-    setupChecked = true
+    companyStore.setupChecked = true
+
+    // Backend unreachable — let navigation proceed, App.vue shows the error overlay
+    if (companyStore.backendReachable === false) {
+      return true
+    }
+
     if (!isSetup) {
+      // Backend is reachable but no active company — check if companies exist
+      await companyStore.fetchAllCompanies()
+      if (companyStore.companies.length > 0) {
+        return '/select-company'
+      }
       return '/setup'
     }
+
     await companyStore.fetchProfile()
   }
 
-  // If navigating to root, redirect to active company's dashboard
+  // If navigating to root (no company in URL), show company selector
   if (to.path === '/') {
-    if (companyStore.activeCompanyId) {
-      return `/company/${companyStore.activeCompanyId}/dashboard`
+    if (companyStore.companies.length > 0) {
+      return '/select-company'
     }
     return '/setup'
   }
@@ -98,7 +111,9 @@ router.beforeEach(async (to) => {
     try {
       await companyStore.activateCompany(companyId)
     } catch {
-      // Invalid company ID — redirect to setup
+      if (companyStore.companies.length > 0) {
+        return '/select-company'
+      }
       return '/setup'
     }
   }

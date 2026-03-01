@@ -53,6 +53,8 @@ export const useCompanyStore = defineStore('company', () => {
   const setupComplete = ref(false)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
+  const backendReachable = ref<boolean | null>(null) // null = not checked yet
+  const setupChecked = ref(false)
 
   const logoUrl = computed(() => {
     if (!profile.value?.logo_path) return null
@@ -62,12 +64,26 @@ export const useCompanyStore = defineStore('company', () => {
   async function checkSetupStatus(): Promise<boolean> {
     try {
       const res = await companyApi.getSetupStatus()
+      backendReachable.value = true
       setupComplete.value = res.data.setupComplete
       return res.data.setupComplete
-    } catch {
+    } catch (err: any) {
+      if (!err.response) {
+        // No response at all = backend unreachable (network error, timeout)
+        backendReachable.value = false
+      } else {
+        // Got a response (e.g. 500) = backend is reachable but erroring
+        backendReachable.value = true
+      }
       setupComplete.value = false
       return false
     }
+  }
+
+  async function retryConnection(): Promise<boolean> {
+    backendReachable.value = null
+    setupChecked.value = false
+    return checkSetupStatus()
   }
 
   async function fetchProfile() {
@@ -159,8 +175,11 @@ export const useCompanyStore = defineStore('company', () => {
     setupComplete,
     isLoading,
     error,
+    backendReachable,
+    setupChecked,
     logoUrl,
     checkSetupStatus,
+    retryConnection,
     fetchProfile,
     fetchAllCompanies,
     activateCompany,
