@@ -194,6 +194,7 @@ export class ElorusService {
     company?: string;
     first_name?: string;
     last_name?: string;
+    client_type?: number;  // 1 = person, 2 = company
     vat_number?: string;
     profession?: string;
     is_client?: boolean;
@@ -412,6 +413,7 @@ export async function getOrCreateElorusContact(
     company: lead.company_name,
     first_name: firstName,
     last_name: lastName,
+    client_type: 2,  // 2 = company
     ...(lead.vat_id && { vat_number: lead.vat_id }),
     is_client: true,
     email: lead.contact_email ? [{ email: lead.contact_email, primary: true }] : [],
