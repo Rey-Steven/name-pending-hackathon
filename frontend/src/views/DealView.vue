@@ -3,6 +3,16 @@
     <div class="flex items-center justify-between mb-8">
       <h1 class="text-3xl font-bold text-gray-900">Deal #{{ deal.id }}</h1>
       <div class="flex items-center space-x-3">
+        <!-- Retry Outreach: appears when cold outreach email failed -->
+        <button
+          v-if="deal.status === 'outreach_failed'"
+          @click="retryOutreach"
+          :disabled="retrying"
+          class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center space-x-2 text-sm font-medium"
+        >
+          <span v-if="retrying">Retrying...</span>
+          <span v-else>Retry Outreach</span>
+        </button>
         <!-- View Offer: navigates to Elorus offers tab if linked, otherwise downloads local PDF -->
         <button
           v-if="deal.subtotal > 0"
@@ -33,7 +43,7 @@
             'bg-green-100 text-green-800': deal.status === 'completed',
             'bg-yellow-100 text-yellow-800': deal.status === 'pending',
             'bg-blue-100 text-blue-800': deal.status === 'legal_review' || deal.status === 'invoicing',
-            'bg-red-100 text-red-800': deal.status === 'failed',
+            'bg-red-100 text-red-800': deal.status === 'failed' || deal.status === 'outreach_failed',
           }"
         >
           {{ deal.status }}
@@ -185,6 +195,7 @@ const leadProfile = computed(() => {
   } catch { return null }
 })
 const downloadingPDF = ref(false)
+const retrying = ref(false)
 
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat('el-GR', { style: 'currency', currency: 'EUR' }).format(amount || 0)
@@ -214,6 +225,26 @@ async function viewOffer() {
     console.error('PDF download failed:', err)
   } finally {
     downloadingPDF.value = false
+  }
+}
+
+async function retryOutreach() {
+  if (!deal.value?.id) return
+  retrying.value = true
+  try {
+    await dealsApi.retryOutreach(deal.value.id)
+    // Reload deal data to reflect updated status
+    const res = await dealsApi.getById(deal.value.id)
+    deal.value = res.data
+  } catch (err) {
+    // Error toast is shown automatically by the axios interceptor
+    // Reload deal to get current status
+    try {
+      const res = await dealsApi.getById(deal.value.id)
+      deal.value = res.data
+    } catch {}
+  } finally {
+    retrying.value = false
   }
 }
 

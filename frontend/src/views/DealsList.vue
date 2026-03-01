@@ -42,6 +42,7 @@
         <option value="closed_won">Closed Won</option>
         <option value="closed_lost">Closed Lost</option>
         <option value="reopened">Reopened</option>
+        <option value="outreach_failed">Outreach Failed</option>
         <!-- legacy -->
         <option value="proposal_sent">Proposal Sent (legacy)</option>
         <option value="completed">Completed (legacy)</option>
@@ -123,7 +124,7 @@ const filteredDeals = computed(() => {
 const totalValue = computed(() => deals.value.reduce((sum, d) => sum + (d.total_amount || 0), 0))
 const activeCount = computed(() => deals.value.filter(d => ['lead_contacted', 'in_pipeline', 'offer_sent', 'offer_pending_approval', 'proposal_sent', 'negotiating', 'legal_review', 'invoicing'].includes(d.status)).length)
 const completedCount = computed(() => deals.value.filter(d => ['closed_won', 'completed'].includes(d.status)).length)
-const failedCount = computed(() => deals.value.filter(d => ['closed_lost', 'failed'].includes(d.status)).length)
+const failedCount = computed(() => deals.value.filter(d => ['closed_lost', 'failed', 'outreach_failed'].includes(d.status)).length)
 
 onMounted(async () => {
   try {

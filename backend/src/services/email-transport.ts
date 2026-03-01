@@ -5,6 +5,18 @@ import { EmailDB } from '../database/db';
 
 let transporter: nodemailer.Transporter | null = null;
 
+// Transient network errors that are worth retrying
+const TRANSIENT_ERROR_CODES = new Set([
+  'ENETUNREACH',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'ESOCKET',
+  'EAI_AGAIN',
+]);
+
+const MAX_SEND_ATTEMPTS = 3;
+
 // ─── SMTP (Sending) ───────────────────────────────────────
 
 export function initEmailTransport() {
@@ -46,36 +58,49 @@ export async function sendRealEmail(params: {
 
   const displayName = params.senderName || params.companyContext?.name || fromUser;
 
-  try {
-    const mailOptions: nodemailer.SendMailOptions = {
-      from: `"${displayName}" <${fromUser}>`,
-      to: params.to,
-      subject: params.subject,
-      text: params.body,
-      html: formatEmailHTML(params.subject, params.body, params.companyContext),
-      replyTo: fromUser,
-      attachments: params.attachments?.map(a => ({
-        filename: a.filename,
-        content: a.content,
-      })),
-    };
+  const mailOptions: nodemailer.SendMailOptions = {
+    from: `"${displayName}" <${fromUser}>`,
+    to: params.to,
+    subject: params.subject,
+    text: params.body,
+    html: formatEmailHTML(params.subject, params.body, params.companyContext),
+    replyTo: fromUser,
+    attachments: params.attachments?.map(a => ({
+      filename: a.filename,
+      content: a.content,
+    })),
+  };
 
-    // Thread replies together
-    if (params.inReplyTo) {
-      mailOptions.inReplyTo = params.inReplyTo;
-      mailOptions.references = params.references || params.inReplyTo;
-    }
-
-    const info = await transporter.sendMail(mailOptions);
-
-    // Strip angle brackets for consistent storage (nodemailer returns <id@host>)
-    const messageId = (info.messageId || '').replace(/^<|>$/g, '');
-    console.log(`  📧 ✅ Email SENT to ${params.to} (ID: ${messageId})`);
-    return { sent: true, messageId };
-  } catch (error: any) {
-    console.error(`  📧 ❌ Email FAILED to ${params.to}: ${error.message}`);
-    return { sent: false, error: error.message };
+  // Thread replies together
+  if (params.inReplyTo) {
+    mailOptions.inReplyTo = params.inReplyTo;
+    mailOptions.references = params.references || params.inReplyTo;
   }
+
+  let lastError: any = null;
+  for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS; attempt++) {
+    try {
+      const info = await transporter.sendMail(mailOptions);
+
+      // Strip angle brackets for consistent storage (nodemailer returns <id@host>)
+      const messageId = (info.messageId || '').replace(/^<|>$/g, '');
+      console.log(`  📧 ✅ Email SENT to ${params.to} (ID: ${messageId})`);
+      return { sent: true, messageId };
+    } catch (err: any) {
+      lastError = err;
+      const isTransient = TRANSIENT_ERROR_CODES.has(err.code);
+      if (!isTransient || attempt === MAX_SEND_ATTEMPTS) {
+        break; // permanent error or final attempt — stop retrying
+      }
+      const delayMs = 1000 * Math.pow(2, attempt - 1); // 1s, 2s
+      console.warn(`  📧 ⚠️ Attempt ${attempt}/${MAX_SEND_ATTEMPTS} failed (${err.code}) — retrying in ${delayMs / 1000}s...`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+
+  // All attempts exhausted or permanent error
+  console.error(`  📧 ❌ Email FAILED to ${params.to}: ${lastError.message}`);
+  return { sent: false, error: lastError.message };
 }
 
 // ─── IMAP (Reading) ───────────────────────────────────────

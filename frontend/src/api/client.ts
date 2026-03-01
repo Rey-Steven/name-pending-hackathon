@@ -87,6 +87,7 @@ export const dealsApi = {
   approveOffer: (dealId: string, edits: { offer_product_name?: string; offer_quantity?: number; offer_unit_price?: number; reply_body?: string; elorus_product_id?: string }) =>
     api.post(`/deals/${dealId}/approve-offer`, edits),
   rejectOffer: (dealId: string) => api.post(`/deals/${dealId}/reject-offer`),
+  retryOutreach: (dealId: string) => api.post(`/deals/${dealId}/retry-outreach`),
 }
 
 export const tasksApi = {

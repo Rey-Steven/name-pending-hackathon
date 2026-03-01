@@ -128,6 +128,10 @@ export class WorkflowEngine {
       if (sentCount === 0) {
         const failureMessage = `Cold outreach failed for Deal #${dealId}`;
         console.error(`\n❌ ${failureMessage}`);
+
+        // Update deal status so it's not left as lead_contacted
+        await DealDB.update(dealId, { status: 'outreach_failed', sales_notes: failureMessage });
+
         AuditLog.log('workflow', 'outreach_failed', 'deal', dealId, { leadId, dealId, duration });
         broadcastEvent({
           type: 'workflow_completed',

@@ -298,6 +298,8 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
       });
     }
 
+    let taskHandled = false;
+
     try {
       const result = await this.execute<EmailResult>(
         { lead, emailType, ...context },
@@ -355,13 +357,22 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
         console.log(`     Message ID: ${sendResult.messageId}`);
       }
 
-      if (ownTask) {
-        await TaskQueue.complete(context.taskId!, { sent: sendResult.sent, emailType });
+      if (ownTask && context.taskId) {
+        taskHandled = true;
+        if (sendResult.sent) {
+          await TaskQueue.complete(context.taskId, { sent: true, emailType });
+        } else {
+          await TaskQueue.fail(context.taskId, sendResult.error || 'Email delivery failed');
+        }
+      }
+
+      if (!sendResult.sent) {
+        throw new Error(`Email delivery failed to ${recipientEmail}: ${sendResult.error || 'unknown error'}`);
       }
 
       return result;
     } catch (error: any) {
-      if (ownTask && context.taskId) {
+      if (ownTask && context.taskId && !taskHandled) {
         await TaskQueue.fail(context.taskId, error.message);
       }
       throw error;
@@ -433,6 +444,10 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
       } else {
         await TaskQueue.fail(params.taskId, sendResult.error || 'Email delivery failed');
       }
+    }
+
+    if (!sendResult.sent) {
+      throw new Error(`Email delivery failed to ${params.to}: ${sendResult.error || 'unknown error'}`);
     }
 
     return sendResult;

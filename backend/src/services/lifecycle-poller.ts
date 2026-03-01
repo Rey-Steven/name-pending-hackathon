@@ -124,7 +124,7 @@ export async function pollLostDeals(): Promise<void> {
 
     for (const company of companies) {
       // Include both new ('closed_lost') and legacy ('failed', 'no_response') statuses
-      const deals = await DealDB.findByStatus(['closed_lost', 'failed', 'no_response'], company.id!);
+      const deals = await DealDB.findByStatus(['closed_lost', 'failed', 'no_response', 'outreach_failed'], company.id!);
       const toReopen = deals.filter(d => {
         const updatedAt = d.updated_at || d.created_at || '';
         return updatedAt && daysSince(updatedAt) >= lost_deal_reopen_days;

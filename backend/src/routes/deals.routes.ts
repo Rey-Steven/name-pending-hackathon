@@ -325,4 +325,79 @@ router.post('/:id/reject-offer', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/deals/:id/retry-outreach - Retry failed cold outreach email
+router.post('/:id/retry-outreach', async (req: Request, res: Response) => {
+  try {
+    const dealId = req.params.id;
+    const deal = await DealDB.findById(dealId);
+
+    if (!deal) {
+      return res.status(404).json({ error: 'Deal not found' });
+    }
+
+    if (deal.status !== 'outreach_failed') {
+      return res.status(400).json({
+        error: `Deal is in '${deal.status}' status. Only deals in 'outreach_failed' can be retried.`,
+      });
+    }
+
+    const lead = await LeadDB.findById(deal.lead_id);
+    if (!lead || !lead.contact_email) {
+      return res.status(400).json({ error: 'Lead not found or missing email address' });
+    }
+
+    const companyProfile = await CompanyProfileDB.get();
+    if (!companyProfile) {
+      return res.status(500).json({ error: 'Company profile not configured' });
+    }
+
+    // Reset deal to lead_contacted before retrying
+    await DealDB.update(dealId, { status: 'lead_contacted', sales_notes: deal.sales_notes?.replace(/^Cold outreach failed.*$/, '').trim() || '' });
+
+    const companyProfileCtx = {
+      id: companyProfile.id!,
+      name: companyProfile.name,
+      industry: companyProfile.industry,
+      description: companyProfile.description,
+      business_model: companyProfile.business_model,
+      target_customers: companyProfile.target_customers,
+      products_services: companyProfile.products_services,
+      geographic_focus: companyProfile.geographic_focus,
+      agentContexts: JSON.parse(companyProfile.agent_context_json || '{}'),
+      communication_language: companyProfile.communication_language,
+      terms_of_service: companyProfile.terms_of_service || undefined,
+    };
+
+    const emailAgent = new EmailAgent(companyProfileCtx);
+
+    try {
+      await emailAgent.sendEmail(deal.lead_id, 'cold_outreach', {
+        dealId,
+        salesResult: {
+          productName: deal.product_name,
+          proposalSummary: deal.sales_notes || '',
+        },
+      });
+
+      broadcastEvent({
+        type: 'workflow_completed',
+        agent: 'email',
+        dealId,
+        leadId: deal.lead_id,
+        message: `Cold outreach retried — Deal #${dealId} in pipeline`,
+        timestamp: new Date().toISOString(),
+      });
+
+      res.json({ success: true, status: 'lead_contacted' });
+    } catch (emailError: any) {
+      // Email failed again — revert deal to outreach_failed
+      await DealDB.update(dealId, { status: 'outreach_failed', sales_notes: `Cold outreach retry failed: ${emailError.message}` });
+      res.status(500).json({ error: `Email retry failed: ${emailError.message}` });
+    }
+  } catch (error: any) {
+    console.error('Retry outreach error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
