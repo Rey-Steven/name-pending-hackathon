@@ -4,6 +4,8 @@ import { EmailAgent } from '../agents/email-agent';
 import { CompanyProfileContext } from '../types';
 import { TaskQueue } from './task-queue';
 import { TaskLogger } from './task-logger';
+import { getElorusService } from './elorus-service';
+import { broadcastEvent } from '../routes/dashboard.routes';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -432,5 +434,100 @@ export async function pollContentCreation(): Promise<void> {
     console.error('pollContentCreation error:', err.message);
   } finally {
     pollingContent = false;
+  }
+}
+
+// ─── Elorus Estimate Acceptance Polling ──────────────────────
+// Checks all 'offer_sent' deals with an elorus_estimate_id.
+// If the estimate is now 'accepted' on Elorus: close the deal and run the
+// Legal → Accounting → Invoice pipeline (same as email-accepted flow).
+// If the estimate was 'rejected': close the deal as lost.
+
+let pollingElorusAcceptance = false;
+
+export async function pollElorusAcceptedEstimates(): Promise<void> {
+  if (pollingElorusAcceptance) return;
+  pollingElorusAcceptance = true;
+
+  try {
+    const companies = await CompanyProfileDB.getAll();
+    const { WorkflowEngine } = await import('./workflow-engine');
+
+    for (const company of companies) {
+      const elorusService = await getElorusService(company.id!);
+      if (!elorusService) continue; // Elorus not configured for this company
+
+      const offerDeals = await DealDB.findByStatus(['offer_sent', 'proposal_sent'], company.id!);
+      const elorusDeals = offerDeals.filter(d => d.elorus_estimate_id);
+      if (elorusDeals.length === 0) continue;
+
+      console.log(`\n⚡ Elorus acceptance poll [${company.name}]: checking ${elorusDeals.length} estimate(s)`);
+
+      for (const deal of elorusDeals) {
+        try {
+          const estimate = await elorusService.getEstimate(deal.elorus_estimate_id!);
+
+          if (estimate.status === 'accepted') {
+            console.log(`  ✅ Deal #${deal.id} [${deal.product_name}]: Elorus estimate accepted — closing deal`);
+
+            const lead = await LeadDB.findById(deal.lead_id);
+            if (!lead || !lead.contact_email) {
+              console.warn(`  ⚠️  Deal #${deal.id}: lead not found or missing email`);
+              continue;
+            }
+
+            // Mark deal as won and lead as converted
+            await DealDB.update(deal.id!, { status: 'closed_won' });
+            await LeadDB.update(deal.lead_id, { status: 'converted' });
+
+            // Send deal confirmation email
+            const emailAgent = buildEmailAgent(company);
+            await emailAgent.sendEmail(deal.lead_id, 'confirmation', {
+              dealId: deal.id,
+              salesResult: {
+                productName: deal.product_name,
+                totalAmount: deal.total_amount,
+              },
+            });
+
+            // Run Legal → Accounting → Invoice pipeline
+            const engine = new WorkflowEngine();
+            await engine.completeWorkflow(deal.id!, deal.lead_id, deal);
+
+            broadcastEvent({
+              type: 'workflow_completed',
+              agent: 'sales',
+              dealId: deal.id!,
+              leadId: deal.lead_id,
+              message: `Deal closed won via Elorus acceptance — €${deal.total_amount} (${deal.product_name})`,
+              timestamp: new Date().toISOString(),
+            });
+
+          } else if (estimate.status === 'rejected') {
+            console.log(`  ❌ Deal #${deal.id}: Elorus estimate rejected — closing as lost`);
+
+            await DealDB.update(deal.id!, {
+              status: 'closed_lost',
+              sales_notes: 'CLOSED LOST: Customer rejected the offer via Elorus',
+            });
+
+            broadcastEvent({
+              type: 'workflow_completed',
+              agent: 'sales',
+              dealId: deal.id!,
+              leadId: deal.lead_id,
+              message: `Deal closed lost — offer rejected via Elorus`,
+              timestamp: new Date().toISOString(),
+            });
+          }
+        } catch (err: any) {
+          console.error(`  ❌ Deal #${deal.id} Elorus status check error:`, err.message);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error('pollElorusAcceptedEstimates error:', err.message);
+  } finally {
+    pollingElorusAcceptance = false;
   }
 }

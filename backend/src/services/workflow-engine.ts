@@ -470,7 +470,7 @@ export class WorkflowEngine {
 
   // ─── Complete pipeline after offer accepted ───────────────────
 
-  private async completeWorkflow(dealId: string, leadId: string, deal: any) {
+  async completeWorkflow(dealId: string, leadId: string, deal: any) {
     console.log('\n📍 Running Legal → Accounting → Invoice pipeline');
 
     const { companyProfile, legalAgent, accountingAgent, emailAgent } = await this.createAgents(deal.company_id);
