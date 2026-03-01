@@ -20,6 +20,9 @@ import MarketResearchView from './views/MarketResearchView.vue'
 import SocialContentView from './views/SocialContentView.vue'
 import LegalContracts from './views/LegalContracts.vue'
 import GemiCompanies from './views/GemiCompanies.vue'
+import ElorusContactsList from './views/ElorusContactsList.vue'
+import ElorusProductsList from './views/ElorusProductsList.vue'
+import ElorusOffersList from './views/ElorusOffersList.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -44,6 +47,9 @@ const router = createRouter({
         { path: 'research', name: 'research', component: MarketResearchView },
         { path: 'content', name: 'content', component: SocialContentView },
         { path: 'legal/contracts', name: 'legal-contracts', component: LegalContracts },
+        { path: 'elorus-contacts', name: 'elorus-contacts', component: ElorusContactsList },
+        { path: 'elorus-products', name: 'elorus-products', component: ElorusProductsList },
+        { path: 'elorus-offers', name: 'elorus-offers', component: ElorusOffersList },
       ],
     },
   ],

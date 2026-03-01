@@ -3,6 +3,7 @@ import { DealDB, LeadDB, InvoiceDB, LegalValidationDB, TaskDB, CompanyProfileDB,
 import { generateOfferPDF } from '../services/pdf-generator';
 import { EmailAgent } from '../agents/email-agent';
 import { broadcastEvent } from './dashboard.routes';
+import { getElorusService, getOrCreateElorusContact } from '../services/elorus-service';
 
 const router = Router();
 
@@ -179,9 +180,52 @@ router.post('/:id/approve-offer', async (req: Request, res: Response) => {
     const updatedDeal = await DealDB.findById(dealId);
     if (!updatedDeal) throw new Error('Deal not found after update');
 
-    // Generate PDF with final pricing
-    const pdfBuffer = await generateOfferPDF({ deal: updatedDeal, lead, companyProfile });
     const refId = dealId.slice(0, 8).toUpperCase();
+    let pdfBuffer: Buffer;
+
+    // Try Elorus first; fall back to local PDF if not configured
+    const companyId = (req as any).companyId || companyProfile.id!;
+    const elorusService = await getElorusService(companyId);
+
+    if (elorusService) {
+      // Create Elorus estimate
+      const elorusContactId = await getOrCreateElorusContact(elorusService, lead);
+
+      // Find 24% FPA tax
+      const taxes = await elorusService.listTaxes({ active: 'true' });
+      const fpaTax = (taxes.results || []).find(
+        (t: any) => parseFloat(t.percentage || '0') === 24
+      );
+
+      const estimatePayload: any = {
+        client: elorusContactId,
+        date: new Date().toISOString().split('T')[0],
+        draft: true,
+        calculator_mode: 'initial',
+        currency_code: 'EUR',
+        items: [{
+          title: productName,
+          quantity: String(qty),
+          unit_value: String(unitPrice),
+          taxes: fpaTax ? [{ tax: fpaTax.id }] : [],
+        }],
+      };
+
+      const estimate = await elorusService.createEstimate(estimatePayload);
+
+      // Issue the estimate (mark as non-draft)
+      await elorusService.updateEstimate(estimate.id, { draft: false });
+
+      // Download PDF from Elorus
+      pdfBuffer = await elorusService.getEstimatePDF(estimate.id);
+
+      // Store Elorus estimate ID on the deal
+      await DealDB.update(dealId, { elorus_estimate_id: estimate.id } as any);
+      console.log(`  📄 Elorus estimate created: ${estimate.id}`);
+    } else {
+      // Local PDF fallback
+      pdfBuffer = await generateOfferPDF({ deal: updatedDeal, lead, companyProfile });
+    }
 
     // Send the email with PDF attached
     const companyProfileCtx = {
