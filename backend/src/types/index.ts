@@ -256,6 +256,13 @@ export interface CreateLeadRequest {
   contactName: string;
   contactEmail?: string;
   contactPhone?: string;
+  vatId?: string;
+  gemiNumber?: string;
+  taxOffice?: string;
+  address?: string;
+  city?: string;
+  postalCode?: string;
+  legalForm?: string;
   productInterest?: string;
   companyWebsite?: string;
 }

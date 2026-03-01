@@ -23,9 +23,9 @@ router.get('/stats', async (req: Request, res: Response) => {
       SocialContentDB.all(companyId),
     ]);
 
-    const openDeals = deals.filter(d => ['lead_contacted', 'in_pipeline', 'offer_sent'].includes(d.status ?? ''));
-    const wonDeals = deals.filter(d => d.status === 'closed_won');
-    const lostDeals = deals.filter(d => d.status === 'closed_lost');
+    const openDeals = deals.filter(d => ['lead_contacted', 'in_pipeline', 'offer_sent', 'proposal_sent', 'negotiating', 'legal_review', 'invoicing'].includes(d.status ?? ''));
+    const wonDeals = deals.filter(d => ['closed_won', 'completed'].includes(d.status ?? ''));
+    const lostDeals = deals.filter(d => ['closed_lost', 'failed'].includes(d.status ?? ''));
     const closedTotal = wonDeals.length + lostDeals.length;
 
     res.json({

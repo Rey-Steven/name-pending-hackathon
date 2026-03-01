@@ -35,13 +35,17 @@
         class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
       >
         <option value="">All Statuses</option>
-        <option value="pending">Pending</option>
-        <option value="proposal_sent">Proposal Sent</option>
-        <option value="negotiating">Negotiating</option>
-        <option value="legal_review">Legal Review</option>
-        <option value="invoicing">Invoicing</option>
-        <option value="completed">Completed</option>
-        <option value="failed">Failed</option>
+        <option value="lead_contacted">Lead Contacted</option>
+        <option value="in_pipeline">In Pipeline</option>
+        <option value="offer_sent">Offer Sent</option>
+        <option value="offer_pending_approval">Offer Pending Approval</option>
+        <option value="closed_won">Closed Won</option>
+        <option value="closed_lost">Closed Lost</option>
+        <option value="reopened">Reopened</option>
+        <!-- legacy -->
+        <option value="proposal_sent">Proposal Sent (legacy)</option>
+        <option value="completed">Completed (legacy)</option>
+        <option value="failed">Failed (legacy)</option>
       </select>
     </div>
 
@@ -117,9 +121,9 @@ const filteredDeals = computed(() => {
 })
 
 const totalValue = computed(() => deals.value.reduce((sum, d) => sum + (d.total_amount || 0), 0))
-const activeCount = computed(() => deals.value.filter(d => ['proposal_sent', 'negotiating', 'legal_review', 'invoicing'].includes(d.status)).length)
-const completedCount = computed(() => deals.value.filter(d => d.status === 'completed').length)
-const failedCount = computed(() => deals.value.filter(d => d.status === 'failed').length)
+const activeCount = computed(() => deals.value.filter(d => ['lead_contacted', 'in_pipeline', 'offer_sent', 'offer_pending_approval', 'proposal_sent', 'negotiating', 'legal_review', 'invoicing'].includes(d.status)).length)
+const completedCount = computed(() => deals.value.filter(d => ['closed_won', 'completed'].includes(d.status)).length)
+const failedCount = computed(() => deals.value.filter(d => ['closed_lost', 'failed'].includes(d.status)).length)
 
 onMounted(async () => {
   try {

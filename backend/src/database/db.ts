@@ -34,6 +34,13 @@ export interface Lead {
   contact_name: string;
   contact_email?: string;
   contact_phone?: string;
+  vat_id?: string;
+  gemi_number?: string;
+  tax_office?: string;
+  address?: string;
+  city?: string;
+  postal_code?: string;
+  legal_form?: string;
   product_interest?: string;
   company_website?: string;
   industry?: string;
@@ -194,6 +201,13 @@ export const LeadDB = {
       contact_name: lead.contact_name,
       contact_email: lead.contact_email || null,
       contact_phone: lead.contact_phone || null,
+      vat_id: lead.vat_id || null,
+      gemi_number: lead.gemi_number || null,
+      tax_office: lead.tax_office || null,
+      address: lead.address || null,
+      city: lead.city || null,
+      postal_code: lead.postal_code || null,
+      legal_form: lead.legal_form || null,
       product_interest: lead.product_interest || null,
       company_website: lead.company_website || null,
       industry: lead.industry || null,

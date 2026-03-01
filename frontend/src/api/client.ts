@@ -23,11 +23,19 @@ api.interceptors.request.use((config) => {
 export const leadsApi = {
   getAll: () => api.get('/leads'),
   getById: (id: string) => api.get(`/leads/${id}`),
+  lookupAfm: (vatId: string) => api.get('/leads/lookup-afm', { params: { vatId } }),
   create: (data: {
     companyName: string
     contactName: string
     contactEmail?: string
     contactPhone?: string
+    vatId?: string
+    gemiNumber?: string
+    taxOffice?: string
+    address?: string
+    city?: string
+    postalCode?: string
+    legalForm?: string
     productInterest?: string
     companyWebsite?: string
   }) => api.post('/leads', data),
