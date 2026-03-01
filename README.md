@@ -2,6 +2,10 @@
 
 A 24-hour hackathon project that automates Greek B2B business workflows using AI agents.
 
+## 🎯 Live Demo
+
+Check it out: https://agentive.onrender.com/
+
 ## 🎯 Goal
 
 Help traditional Greek businesses automate manual workflows with coordinating AI agents that handle lead qualification, sales, legal compliance, invoicing, and customer communication.
