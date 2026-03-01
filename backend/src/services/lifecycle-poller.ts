@@ -1,4 +1,4 @@
-import { DealDB, LeadDB, EmailDB, AppSettingsDB, MarketResearchDB, SocialContentDB } from '../database/db';
+import { DealDB, LeadDB, EmailDB, AppSettingsDB, MarketResearchDB, SocialContentDB, TaskDB, Task } from '../database/db';
 import { CompanyProfileDB } from '../database/db';
 import { EmailAgent } from '../agents/email-agent';
 import { CompanyProfileContext } from '../types';
@@ -303,6 +303,96 @@ export async function pollMarketResearch(): Promise<void> {
     console.error('pollMarketResearch error:', err.message);
   } finally {
     pollingResearch = false;
+  }
+}
+
+// ─── Stale Task Recovery ─────────────────────────────────────
+// Finds tasks stuck in pending/processing and re-triggers the responsible agent.
+// pending > 5 min → agent never picked it up (e.g. backend restarted before processing)
+// processing > 10 min → agent crashed mid-execution
+
+let pollingStuckTasks = false;
+
+export async function pollStaleTasks(): Promise<void> {
+  if (pollingStuckTasks) return;
+  pollingStuckTasks = true;
+
+  try {
+    const PENDING_THRESHOLD_MS = 5 * 60 * 1000;   // 5 minutes
+    const PROCESSING_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+
+    const staleTasks = await TaskDB.findStale(PENDING_THRESHOLD_MS, PROCESSING_THRESHOLD_MS);
+
+    if (staleTasks.length === 0) return;
+
+    console.log(`\n🔁 Stale task recovery: ${staleTasks.length} stuck task(s) found`);
+
+    for (const task of staleTasks) {
+      try {
+        console.log(`  🔍 Stale task ${task.id}: [${task.source_agent} → ${task.target_agent}] ${task.title} (status: ${task.status})`);
+
+        if (task.target_agent === 'email') {
+          await recoverEmailTask(task);
+        } else {
+          // Non-email tasks: we can't safely re-trigger without risking duplicate side-effects
+          // (e.g. duplicate invoices, duplicate legal reviews). Mark as failed for visibility.
+          await TaskDB.update(task.id!, {
+            status: 'failed',
+            error_message: `Task stuck in '${task.status}' for >${task.status === 'processing' ? '10' : '5'} min. Marked failed — re-trigger manually if needed.`,
+          });
+          console.warn(`  ⚠️  Task ${task.id} (${task.task_type}): marked failed — requires manual review`);
+        }
+      } catch (err: any) {
+        console.error(`  ❌ Recovery error for task ${task.id}:`, err.message);
+      }
+    }
+  } catch (err: any) {
+    console.error('pollStaleTasks error:', err.message);
+  } finally {
+    pollingStuckTasks = false;
+  }
+}
+
+async function recoverEmailTask(task: Task): Promise<void> {
+  if (!task.company_id) {
+    await TaskDB.update(task.id!, { status: 'failed', error_message: 'Recovery failed: no company_id on task' });
+    return;
+  }
+
+  const parsedInput = task.input_data ? (() => { try { return JSON.parse(task.input_data!); } catch { return null; } })() : null;
+  if (!parsedInput) {
+    await TaskDB.update(task.id!, { status: 'failed', error_message: 'Recovery failed: could not parse input_data' });
+    return;
+  }
+
+  const companyRaw = await CompanyProfileDB.getById(task.company_id);
+  if (!companyRaw) {
+    await TaskDB.update(task.id!, { status: 'failed', error_message: 'Recovery failed: company profile not found' });
+    return;
+  }
+
+  // Reset to processing before attempting (handles tasks that were already in processing)
+  await TaskDB.update(task.id!, { status: 'processing' });
+
+  try {
+    const emailAgent = buildEmailAgent(companyRaw);
+    await emailAgent.sendEmail(
+      parsedInput.leadId,
+      parsedInput.emailType || 'cold_outreach',
+      {
+        dealId: parsedInput.dealId,
+        taskId: task.id!,
+        salesResult: parsedInput.salesResult,
+        invoiceData: parsedInput.invoiceData,
+        invoiceNumber: parsedInput.invoiceNumber,
+        invoiceId: parsedInput.invoiceId,
+      }
+    );
+    await TaskQueue.complete(task.id!, { recovered: true });
+    console.log(`  ✅ Task ${task.id}: recovered — ${parsedInput.emailType || 'email'} sent`);
+  } catch (err: any) {
+    await TaskQueue.fail(task.id!, `Recovery failed: ${err.message}`);
+    console.error(`  ❌ Task ${task.id}: recovery attempt failed:`, err.message);
   }
 }
 

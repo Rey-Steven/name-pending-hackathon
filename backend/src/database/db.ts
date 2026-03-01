@@ -401,6 +401,23 @@ export const TaskDB = {
       .get();
     return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Task[];
   },
+
+  // Find tasks stuck in pending/processing older than the given threshold (ms).
+  // Uses created_at for pending tasks, started_at (fallback: created_at) for processing tasks.
+  findStale: async (pendingThresholdMs: number, processingThresholdMs: number): Promise<Task[]> => {
+    const snap = await fdb().collection('tasks')
+      .where('deleted_at', '==', null)
+      .where('status', 'in', ['pending', 'processing'])
+      .get();
+    const pendingCutoff = new Date(Date.now() - pendingThresholdMs).toISOString();
+    const processingCutoff = new Date(Date.now() - processingThresholdMs).toISOString();
+    return (snap.docs.map(d => ({ id: d.id, ...d.data() })) as Task[])
+      .filter(t => {
+        if (t.status === 'pending') return (t.created_at || '') < pendingCutoff;
+        if (t.status === 'processing') return (t.started_at || t.created_at || '') < processingCutoff;
+        return false;
+      });
+  },
 };
 
 // ─── Invoice Operations ───────────────────────────────────────

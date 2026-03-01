@@ -2,99 +2,94 @@
   <div class="bg-white rounded-lg shadow p-6">
     <h2 class="text-lg font-semibold mb-6">Agent Pipeline</h2>
 
-    <div class="space-y-4">
-      <!-- Marketing Agent -->
-      <div class="flex items-center space-x-3">
-        <div
-          class="w-12 h-12 rounded-full flex items-center justify-center text-xl"
-          :class="getAgentBg('marketing')"
-        >
-          🎯
-        </div>
-        <div class="flex-1">
-          <div class="flex justify-between items-center">
-            <span class="font-medium text-marketing">Marketing Agent</span>
-            <StatusBadge :status="getAgentStatus('marketing')" />
+    <div class="relative">
+      <!-- Vertical connector line -->
+      <div class="absolute left-5 top-6 bottom-[108px] w-px bg-gray-200"></div>
+
+      <div class="space-y-1">
+
+        <!-- Marketing Agent -->
+        <div class="flex items-center gap-3 py-2.5">
+          <div class="relative z-10 w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0"
+            :class="getAgentBg('marketing')">
+            🎯
           </div>
-          <p class="text-xs text-gray-500">Leads, research & content</p>
-        </div>
-      </div>
-
-      <!-- Arrow -->
-      <div class="flex justify-center">
-        <svg class="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
-        </svg>
-      </div>
-
-      <!-- Sales Agent -->
-      <div class="flex items-center space-x-3">
-        <div
-          class="w-12 h-12 rounded-full flex items-center justify-center text-xl"
-          :class="getAgentBg('sales')"
-        >
-          💼
-        </div>
-        <div class="flex-1">
-          <div class="flex justify-between items-center">
-            <span class="font-medium text-sales">Sales Agent</span>
-            <StatusBadge :status="getAgentStatus('sales')" />
+          <div class="flex-1 min-w-0">
+            <div class="flex justify-between items-center gap-2">
+              <span class="font-medium text-sm text-marketing">Marketing Agent</span>
+              <StatusBadge :status="getAgentStatus('marketing')" />
+            </div>
+            <p class="text-xs text-gray-400 mt-0.5">Leads, research & content</p>
           </div>
-          <p class="text-xs text-gray-500">Qualification & deal closure</p>
         </div>
-      </div>
 
-      <!-- Fork arrows -->
-      <div class="flex justify-center space-x-12">
-        <svg class="w-6 h-6 text-red-400 -rotate-45" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
-        </svg>
-        <svg class="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
-        </svg>
-        <svg class="w-6 h-6 text-red-400 rotate-45" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
-        </svg>
-      </div>
-
-      <!-- Parallel agents: Legal, Accounting, Email -->
-      <div class="grid grid-cols-3 gap-3">
-        <!-- Legal -->
-        <div class="p-3 rounded-lg border" :class="getAgentBorder('legal')">
-          <div class="flex items-center space-x-2 mb-1">
-            <span class="text-lg">⚖️</span>
-            <span class="font-medium text-sm text-legal">Legal</span>
+        <!-- Sales Agent -->
+        <div class="flex items-center gap-3 py-2.5">
+          <div class="relative z-10 w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0"
+            :class="getAgentBg('sales')">
+            💼
           </div>
-          <StatusBadge :status="getAgentStatus('legal')" />
-          <p class="text-xs text-gray-500 mt-1">Compliance</p>
+          <div class="flex-1 min-w-0">
+            <div class="flex justify-between items-center gap-2">
+              <span class="font-medium text-sm text-sales">Sales Agent</span>
+              <StatusBadge :status="getAgentStatus('sales')" />
+            </div>
+            <p class="text-xs text-gray-400 mt-0.5">Qualification & deal closure</p>
+          </div>
         </div>
 
-        <!-- Accounting -->
-        <div class="p-3 rounded-lg border" :class="getAgentBorder('accounting')">
-          <div class="flex items-center space-x-2 mb-1">
-            <span class="text-lg">📊</span>
-            <span class="font-medium text-sm text-accounting">Accounting</span>
+        <!-- Branch label -->
+        <div class="flex items-center gap-3 py-1">
+          <div class="w-10 shrink-0 flex justify-center">
+            <div class="w-px h-4 bg-gray-200"></div>
           </div>
-          <StatusBadge :status="getAgentStatus('accounting')" />
-          <p class="text-xs text-gray-500 mt-1">Invoicing</p>
+          <p class="text-xs text-gray-400 italic">On deal closed</p>
         </div>
 
-        <!-- Email -->
-        <div class="p-3 rounded-lg border" :class="getAgentBorder('email')">
-          <div class="flex items-center space-x-2 mb-1">
-            <span class="text-lg">📧</span>
-            <span class="font-medium text-sm text-email">Email</span>
+        <!-- Parallel agents -->
+        <div class="flex items-stretch gap-2 pt-1 ml-0">
+          <!-- Left spacer to keep alignment -->
+          <div class="w-10 shrink-0"></div>
+
+          <div class="flex-1 grid grid-cols-3 gap-2">
+            <!-- Legal -->
+            <div class="rounded-lg border p-3" :class="getAgentBorder('legal')">
+              <div class="flex items-center gap-1.5 mb-2">
+                <span class="text-base">⚖️</span>
+                <span class="font-medium text-xs text-legal">Legal</span>
+              </div>
+              <StatusBadge :status="getAgentStatus('legal')" />
+              <p class="text-xs text-gray-400 mt-1.5">Compliance</p>
+            </div>
+
+            <!-- Accounting -->
+            <div class="rounded-lg border p-3" :class="getAgentBorder('accounting')">
+              <div class="flex items-center gap-1.5 mb-2">
+                <span class="text-base">📊</span>
+                <span class="font-medium text-xs text-accounting">Accounting</span>
+              </div>
+              <StatusBadge :status="getAgentStatus('accounting')" />
+              <p class="text-xs text-gray-400 mt-1.5">Invoicing</p>
+            </div>
+
+            <!-- Email -->
+            <div class="rounded-lg border p-3" :class="getAgentBorder('email')">
+              <div class="flex items-center gap-1.5 mb-2">
+                <span class="text-base">📧</span>
+                <span class="font-medium text-xs text-email">Email</span>
+              </div>
+              <StatusBadge :status="getAgentStatus('email')" />
+              <p class="text-xs text-gray-400 mt-1.5">Notifications</p>
+            </div>
           </div>
-          <StatusBadge :status="getAgentStatus('email')" />
-          <p class="text-xs text-gray-500 mt-1">Notifications</p>
         </div>
+
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
 import StatusBadge from './StatusBadge.vue'
 
@@ -121,9 +116,9 @@ function getAgentBg(agent: string) {
 
 function getAgentBorder(agent: string) {
   const status = getAgentStatus(agent)
-  if (status === 'processing') return 'border-blue-400 bg-blue-50 animate-pulse'
-  if (status === 'completed') return 'border-green-400 bg-green-50'
-  if (status === 'failed') return 'border-red-400 bg-red-50'
-  return 'border-gray-200'
+  if (status === 'processing') return 'border-blue-300 bg-blue-50 animate-pulse'
+  if (status === 'completed') return 'border-green-300 bg-green-50'
+  if (status === 'failed') return 'border-red-300 bg-red-50'
+  return 'border-gray-200 bg-gray-50'
 }
 </script>
