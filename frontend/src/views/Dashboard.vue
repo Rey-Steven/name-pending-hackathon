@@ -83,6 +83,9 @@
       </div>
     </div>
 
+    <!-- Pending Offer Approvals -->
+    <PendingOffers ref="pendingOffersRef" />
+
     <!-- Sales Pipeline -->
     <div class="mb-8 bg-white rounded-lg shadow" v-if="store.stats">
       <div class="p-4 border-b">
@@ -242,12 +245,14 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
 import { workflowApi } from '../api/client'
 import AgentPipeline from '../components/AgentPipeline.vue'
+import PendingOffers from '../components/PendingOffers.vue'
 
 const store = useDashboardStore()
+const pendingOffersRef = ref<InstanceType<typeof PendingOffers> | null>(null)
 
 const pipelineStages = [
   { key: 'lead_contacted', name: 'Lead Contacted', bg: 'bg-blue-50', text: 'text-blue-700', label: 'text-blue-500' },
@@ -296,6 +301,13 @@ async function startWorkflow(leadId: string) {
     store.isWorkflowRunning = false
   }
 }
+
+// Reload pending offers panel whenever a new offer draft SSE event arrives
+watch(() => store.agentEvents[0], (event) => {
+  if (event?.type === 'offer_pending_approval') {
+    pendingOffersRef.value?.load()
+  }
+})
 
 onMounted(() => {
   store.refreshAll()

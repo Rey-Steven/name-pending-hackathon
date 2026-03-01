@@ -4,7 +4,7 @@ import { LegalAgent } from '../agents/legal-agent';
 import { AccountingAgent } from '../agents/accounting-agent';
 import { EmailAgent } from '../agents/email-agent';
 import { TaskQueue } from './task-queue';
-import { DealDB, LeadDB, AuditLog, CompanyProfileDB, AppSettingsDB, Lead } from '../database/db';
+import { DealDB, LeadDB, AuditLog, CompanyProfileDB, AppSettingsDB, PendingOfferDB, Lead } from '../database/db';
 import { generateOfferPDF } from './pdf-generator';
 import { broadcastEvent } from '../routes/dashboard.routes';
 import { CompanyProfileContext } from '../types';
@@ -284,58 +284,51 @@ export class WorkflowEngine {
         message: `Lead engaged — conversation ongoing` };
     }
 
-    // ─── WANTS OFFER / COUNTER / NEW OFFER: Send formal offer with PDF ────
+    // ─── WANTS OFFER / COUNTER / NEW OFFER: Save draft, await human approval ─
     if (action === 'wants_offer' || action === 'counter' || action === 'new_offer') {
-      const offerUpdates: any = { status: 'offer_sent', negotiation_round: roundNumber };
-
-      // Update deal pricing with the new offer details
-      if (analysis.data.offerSubtotal) {
-        offerUpdates.deal_value = analysis.data.offerSubtotal;
-        offerUpdates.subtotal = analysis.data.offerSubtotal;
-      }
-      if (analysis.data.offerFpaAmount) offerUpdates.fpa_amount = analysis.data.offerFpaAmount;
-      if (analysis.data.offerTotalAmount) offerUpdates.total_amount = analysis.data.offerTotalAmount;
-      if (analysis.data.offerProductName) offerUpdates.product_name = analysis.data.offerProductName;
-      if (analysis.data.offerQuantity) offerUpdates.quantity = analysis.data.offerQuantity;
-      if (analysis.data.offerSummary) offerUpdates.sales_notes = analysis.data.offerSummary;
-
-      await DealDB.update(dealId, offerUpdates);
-
-      // Generate PDF offer — required, do not send email without it
-      const updatedDeal = await DealDB.findById(dealId);
-      if (!updatedDeal) throw new Error(`Deal ${dealId} not found after update`);
-
-      const companyProfile = await CompanyProfileDB.getById(deal.company_id!);
-      if (!companyProfile) throw new Error('Company profile not configured — cannot generate offer PDF');
-
-      const pdfBuffer = await generateOfferPDF({ deal: updatedDeal, lead: lead as Lead, companyProfile });
-      const refId = dealId.slice(0, 8).toUpperCase();
-      console.log(`  📎 PDF offer generated (${(pdfBuffer.length / 1024).toFixed(1)} KB)`);
-
-      await emailAgent.deliver({
-        to: lead.contact_email!,
-        subject: reply.subject,
-        body: analysis.data.replyBody,
-        dealId,
-        recipientName: lead.contact_name,
-        emailType: 'proposal',
-        inReplyTo: reply.messageId,
+      const pendingOfferId = await PendingOfferDB.create({
+        company_id: deal.company_id,
+        deal_id: dealId,
+        lead_id: deal.lead_id,
+        action,
+        offer_product_name: analysis.data.offerProductName || deal.product_name || '',
+        offer_quantity: analysis.data.offerQuantity || deal.quantity || 1,
+        offer_unit_price: analysis.data.offerUnitPrice || 0,
+        offer_subtotal: analysis.data.offerSubtotal || deal.subtotal || 0,
+        offer_fpa_rate: analysis.data.offerFpaRate || 0.24,
+        offer_fpa_amount: analysis.data.offerFpaAmount || deal.fpa_amount || 0,
+        offer_total_amount: analysis.data.offerTotalAmount || deal.total_amount || 0,
+        offer_summary: analysis.data.offerSummary || undefined,
+        reply_subject: reply.subject,
+        reply_body: analysis.data.replyBody,
+        in_reply_to: reply.messageId,
         references: reply.references ? `${reply.references} ${reply.messageId}` : reply.messageId,
-        attachments: [{ filename: `Prosfora-${refId}.pdf`, content: pdfBuffer }],
+        round_number: roundNumber,
+        status: 'pending',
       });
 
-      const label = action === 'wants_offer' ? 'Offer sent' : action === 'counter' ? 'Counter-offer sent' : 'New offer sent';
-      console.log(`\n  💰 ${label} — €${analysis.data.offerTotalAmount || deal.total_amount}`);
+      await DealDB.update(dealId, {
+        status: 'offer_pending_approval',
+        negotiation_round: roundNumber,
+      });
+
+      const label = action === 'wants_offer' ? 'Offer draft ready' : action === 'counter' ? 'Counter-offer draft ready' : 'New offer draft ready';
+      console.log(`\n  📋 ${label} — €${analysis.data.offerTotalAmount || deal.total_amount} (pending approval)`);
 
       broadcastEvent({
-        type: 'workflow_completed', agent: 'sales', dealId, leadId: deal.lead_id,
-        message: `${label} — round ${roundNumber} (PDF attached)`,
+        type: 'offer_pending_approval',
+        agent: 'sales',
+        dealId,
+        leadId: deal.lead_id,
+        message: `${label} — review and approve before sending (round ${roundNumber})`,
+        data: { pendingOfferId, offerTotal: analysis.data.offerTotalAmount },
         timestamp: new Date().toISOString(),
-      });
+      } as any);
 
-      return { status: 'offer_sent', dealId, action, round: roundNumber, duration,
+      return { status: 'offer_pending_approval', dealId, action, round: roundNumber, duration,
+        pendingOfferId,
         offerTotal: analysis.data.offerTotalAmount,
-        message: `${label} (round ${roundNumber}/${MAX_OFFER_ROUNDS})` };
+        message: `${label} — awaiting approval` };
     }
 
     // ─── ACCEPTED: Run Legal → Accounting → Invoice pipeline ─────

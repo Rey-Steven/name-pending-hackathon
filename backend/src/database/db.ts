@@ -871,3 +871,94 @@ export const CompanyProfileDB = {
     return doc.exists && !doc.data()!.deleted_at;
   },
 };
+
+// ─── Pending Offers (draft offers awaiting human approval) ────
+
+export interface PendingOffer {
+  id?: string;
+  company_id?: string;
+  deal_id: string;
+  lead_id: string;
+  action: 'wants_offer' | 'counter' | 'new_offer';
+  // Offer fields — editable before approval
+  offer_product_name: string;
+  offer_quantity: number;
+  offer_unit_price: number;
+  offer_subtotal: number;
+  offer_fpa_rate: number;
+  offer_fpa_amount: number;
+  offer_total_amount: number;
+  offer_summary?: string;
+  // Email fields — editable before approval
+  reply_subject: string;
+  reply_body: string;
+  // Threading data — not editable
+  in_reply_to?: string;
+  references?: string;
+  round_number: number;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at?: string;
+  updated_at?: string;
+}
+
+export const PendingOfferDB = {
+  create: async (offer: PendingOffer): Promise<string> => {
+    const now = new Date().toISOString();
+    const ref = await fdb().collection('pending_offers').add({
+      company_id: offer.company_id || null,
+      deal_id: offer.deal_id,
+      lead_id: offer.lead_id,
+      action: offer.action,
+      offer_product_name: offer.offer_product_name,
+      offer_quantity: offer.offer_quantity,
+      offer_unit_price: offer.offer_unit_price,
+      offer_subtotal: offer.offer_subtotal,
+      offer_fpa_rate: offer.offer_fpa_rate,
+      offer_fpa_amount: offer.offer_fpa_amount,
+      offer_total_amount: offer.offer_total_amount,
+      offer_summary: offer.offer_summary || null,
+      reply_subject: offer.reply_subject,
+      reply_body: offer.reply_body,
+      in_reply_to: offer.in_reply_to || null,
+      references: offer.references || null,
+      round_number: offer.round_number,
+      status: 'pending',
+      created_at: now,
+      updated_at: now,
+    });
+    return ref.id;
+  },
+
+  findById: async (id: string): Promise<PendingOffer | undefined> => {
+    const doc = await fdb().collection('pending_offers').doc(id).get();
+    if (!doc.exists) return undefined;
+    return { id: doc.id, ...doc.data() } as PendingOffer;
+  },
+
+  findByDeal: async (dealId: string): Promise<PendingOffer | undefined> => {
+    const snap = await fdb().collection('pending_offers')
+      .where('deal_id', '==', dealId)
+      .where('status', '==', 'pending')
+      .get();
+    if (snap.empty) return undefined;
+    const doc = snap.docs[0];
+    return { id: doc.id, ...doc.data() } as PendingOffer;
+  },
+
+  allPending: async (companyId: string): Promise<PendingOffer[]> => {
+    const snap = await fdb().collection('pending_offers')
+      .where('company_id', '==', companyId)
+      .where('status', '==', 'pending')
+      .get();
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PendingOffer))
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  },
+
+  update: async (id: string, updates: Partial<PendingOffer>): Promise<void> => {
+    const { id: _id, ...rest } = updates as any;
+    await fdb().collection('pending_offers').doc(id).update({
+      ...rest,
+      updated_at: new Date().toISOString(),
+    });
+  },
+};

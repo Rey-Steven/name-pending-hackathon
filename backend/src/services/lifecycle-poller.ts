@@ -28,53 +28,71 @@ export async function pollStaleLeads(): Promise<void> {
     const companies = await CompanyProfileDB.getAll();
 
     for (const company of companies) {
-      // Include both new ('offer_sent') and legacy ('proposal_sent') statuses
-      const deals = await DealDB.findByStatus(['offer_sent', 'proposal_sent'], company.id!);
-      const stale = deals.filter(d => {
+      // Offer-stage deals: send follow-up reminder emails
+      const offerDeals = await DealDB.findByStatus(['offer_sent', 'proposal_sent', 'offer_pending_approval'], company.id!);
+      const staleOffers = offerDeals.filter(d => {
         const updatedAt = d.updated_at || d.created_at || '';
         return updatedAt && daysSince(updatedAt) >= stale_lead_days && (d.follow_up_count ?? 0) < max_followup_attempts;
       });
 
-      if (stale.length === 0) continue;
-      console.log(`\n📬 Stale leads [${company.name}]: ${stale.length} deal(s) need follow-up`);
+      if (staleOffers.length > 0) {
+        console.log(`\n📬 Stale offers [${company.name}]: ${staleOffers.length} deal(s) need follow-up`);
+        const emailAgent = buildEmailAgent(company);
 
-      const emailAgent = buildEmailAgent(company);
+        for (const deal of staleOffers) {
+          try {
+            const lead = await LeadDB.findById(deal.lead_id);
+            if (!lead || !lead.contact_email) {
+              console.warn(`  ⚠️  Deal #${deal.id}: no lead/email — skipping`);
+              continue;
+            }
 
-      for (const deal of stale) {
-        try {
-          const lead = await LeadDB.findById(deal.lead_id);
-          if (!lead || !lead.contact_email) {
-            console.warn(`  ⚠️  Deal #${deal.id}: no lead/email — skipping`);
-            continue;
+            const followUpCount = deal.follow_up_count ?? 0;
+            const dealEmails = await EmailDB.findByDeal(deal.id!);
+            const lastEmail = dealEmails.length > 0 ? dealEmails[dealEmails.length - 1] : undefined;
+            const threadWith = lastEmail?.message_id ? { messageId: lastEmail.message_id, subject: lastEmail.subject } : undefined;
+
+            await emailAgent.sendEmail(deal.lead_id, 'follow_up', {
+              dealId: deal.id,
+              salesResult: {
+                productName: deal.product_name,
+                totalAmount: deal.total_amount,
+                followUpCount,
+                daysSinceProposal: Math.floor(daysSince(deal.updated_at || deal.created_at || '')),
+              },
+              threadWith,
+            });
+
+            const newCount = followUpCount + 1;
+            await DealDB.update(deal.id!, {
+              follow_up_count: newCount,
+              ...(newCount >= max_followup_attempts ? { status: 'closed_lost', sales_notes: 'CLOSED LOST: No response after maximum follow-up attempts' } : {}),
+            });
+
+            console.log(`  ✅ Deal #${deal.id}: follow-up #${newCount} sent${newCount >= max_followup_attempts ? ' → closed_lost (no response)' : ''}`);
+          } catch (err: any) {
+            console.error(`  ❌ Deal #${deal.id} follow-up error:`, err.message);
           }
+        }
+      }
 
-          const followUpCount = deal.follow_up_count ?? 0;
+      // Early-stage deals (contacted/in_pipeline): close if lead went silent
+      const earlyDeals = await DealDB.findByStatus(['lead_contacted', 'in_pipeline'], company.id!);
+      const silentLeads = earlyDeals.filter(d => {
+        const updatedAt = d.updated_at || d.created_at || '';
+        // Give 2× the stale threshold before closing early-stage — they may just be slow to reply
+        return updatedAt && daysSince(updatedAt) >= stale_lead_days * 2 && (d.follow_up_count ?? 0) >= max_followup_attempts;
+      });
 
-          // Look up the last email in this deal's thread for proper Gmail threading
-          const dealEmails = await EmailDB.findByDeal(deal.id!);
-          const lastEmail = dealEmails.length > 0 ? dealEmails[dealEmails.length - 1] : undefined;
-          const threadWith = lastEmail?.message_id ? { messageId: lastEmail.message_id, subject: lastEmail.subject } : undefined;
-
-          await emailAgent.sendEmail(deal.lead_id, 'follow_up', {
-            dealId: deal.id,
-            salesResult: {
-              productName: deal.product_name,
-              totalAmount: deal.total_amount,
-              followUpCount,
-              daysSinceProposal: Math.floor(daysSince(deal.updated_at || deal.created_at || '')),
-            },
-            threadWith,
-          });
-
-          const newCount = followUpCount + 1;
+      for (const deal of silentLeads) {
+        try {
           await DealDB.update(deal.id!, {
-            follow_up_count: newCount,
-            ...(newCount >= max_followup_attempts ? { status: 'no_response' } : {}),
+            status: 'closed_lost',
+            sales_notes: 'CLOSED LOST: Lead went silent during discovery/outreach phase',
           });
-
-          console.log(`  ✅ Deal #${deal.id}: follow-up #${newCount} sent${newCount >= max_followup_attempts ? ' → marked no_response' : ''}`);
+          console.log(`  🔕 Deal #${deal.id}: early-stage silent lead → closed_lost`);
         } catch (err: any) {
-          console.error(`  ❌ Deal #${deal.id} follow-up error:`, err.message);
+          console.error(`  ❌ Deal #${deal.id} silent close error:`, err.message);
         }
       }
     }

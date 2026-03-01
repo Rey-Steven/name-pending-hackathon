@@ -22,6 +22,10 @@ export const dealsApi = {
   getAll: () => api.get('/deals'),
   getById: (id: string) => api.get(`/deals/${id}`),
   downloadPDF: (id: string) => api.get(`/deals/${id}/pdf`, { responseType: 'blob' }),
+  getPendingOffers: () => api.get('/deals/pending-offers'),
+  approveOffer: (dealId: string, edits: { offer_product_name?: string; offer_quantity?: number; offer_unit_price?: number; reply_body?: string }) =>
+    api.post(`/deals/${dealId}/approve-offer`, edits),
+  rejectOffer: (dealId: string) => api.post(`/deals/${dealId}/reject-offer`),
 }
 
 export const tasksApi = {
