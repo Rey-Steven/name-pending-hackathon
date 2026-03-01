@@ -194,8 +194,8 @@ router.post('/:id/approve-offer', async (req: Request, res: Response) => {
 
       // Fetch taxes and document types in parallel
       const [taxes, docTypes] = await Promise.all([
-        elorusService.listTaxes({ active: 'true' }),
-        elorusService.listDocumentTypes({ application: 3, active: 'true' }),
+        elorusService.listTaxes({ active: '1' }),
+        elorusService.listDocumentTypes({ application: 3, active: '1' }),
       ]);
 
       const fpaTax = (taxes.results || []).find(
@@ -203,15 +203,15 @@ router.post('/:id/approve-offer', async (req: Request, res: Response) => {
       );
 
       // Pick the default estimate document type (required to issue the estimate)
-      const estimateDocType = (docTypes.results || []).find((dt: any) => dt.default) || docTypes.results?.[0];
+      const estimateDocType = (docTypes.results || []).find((dt: any) => dt.default_for_application) || docTypes.results?.[0];
 
       const estimatePayload: any = {
-        client: elorusContactId,
+        client: Number(elorusContactId),
         date: new Date().toISOString().split('T')[0],
         draft: true,
         calculator_mode: 'initial',
         currency_code: 'EUR',
-        ...(estimateDocType && { documenttype: estimateDocType.id }),
+        ...(estimateDocType && { documenttype: Number(estimateDocType.id) }),
         items: [{
           // Use Elorus product reference when provided (ensures only catalogued products)
           ...(elorus_product_id ? { product: elorus_product_id } : { title: productName }),

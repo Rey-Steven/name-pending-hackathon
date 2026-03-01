@@ -154,7 +154,7 @@ export interface ElorusDocumentType {
   title: string;
   active: boolean;
   application: number; // 1=Invoices, 2=Credit Notes, 3=Estimates
-  default: boolean;
+  default_for_application: boolean;
 }
 
 // ─── Service ─────────────────────────────────────────────────
@@ -247,7 +247,7 @@ export class ElorusService {
   }
 
   async createEstimate(payload: {
-    client: string;
+    client: string | number;
     items: Array<{
       product?: string;
       title?: string;
@@ -265,7 +265,7 @@ export class ElorusService {
     terms?: string;
     public_notes?: string;
     template?: number;
-    documenttype?: string;
+    documenttype?: string | number;
     sequence_flat?: string;
   }): Promise<ElorusEstimate> {
     const { data } = await this.client.post('/estimates/', payload);
@@ -313,7 +313,7 @@ export class ElorusService {
   }
 
   async createInvoice(payload: {
-    client: string;
+    client: string | number;
     date: string;
     items: Array<{
       product?: string;
@@ -331,7 +331,7 @@ export class ElorusService {
     terms?: string;
     public_notes?: string;
     template?: number;
-    documenttype?: string;
+    documenttype?: string | number;
     sequence_flat?: string;
   }): Promise<ElorusInvoice> {
     const { data } = await this.client.post('/invoices/', payload);

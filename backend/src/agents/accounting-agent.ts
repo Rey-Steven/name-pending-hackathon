@@ -114,26 +114,52 @@ Generate the full invoice and accounting entries.`;
         const elorusContactId = await getOrCreateElorusContact(elorusService, lead);
 
         // Fetch taxes and invoice document types in parallel
-        const [taxes, docTypes] = await Promise.all([
-          elorusService.listTaxes({ active: 'true' }),
-          elorusService.listDocumentTypes({ application: 1, active: 'true' }),
+        const [taxes, activeDocTypes] = await Promise.all([
+          elorusService.listTaxes({ active: '1' }),
+          elorusService.listDocumentTypes({ application: 1, active: '1' }),
         ]);
+
+        console.log(`  🔍 Elorus taxes fetched: ${taxes.results?.length ?? 0} result(s)`);
+        console.log(`  🔍 Elorus invoice doc types (active): ${activeDocTypes.results?.length ?? 0} result(s)`);
+
+        // Fallback: if no active invoice document types found, retry without the active filter
+        let docTypes = activeDocTypes;
+        if (!docTypes.results?.length) {
+          console.log('  ⚠️ No active invoice document types found — retrying without active filter');
+          docTypes = await elorusService.listDocumentTypes({ application: 1 });
+          console.log(`  🔍 Elorus invoice doc types (all): ${docTypes.results?.length ?? 0} result(s)`);
+        }
 
         const fpaTax = (taxes.results || []).find(
           (t: any) => parseFloat(t.percentage || '0') === 24
         );
 
-        const invoiceDocType = (docTypes.results || []).find((dt: any) => dt.default) || docTypes.results?.[0];
+        if (!fpaTax) {
+          console.warn(
+            '  ⚠️ No 24% FPA tax found in Elorus — invoice items will be created without tax. ' +
+            'Available tax rates: ' +
+            (taxes.results || []).map((t: any) => `${t.title} (${t.percentage}%)`).join(', ')
+          );
+        }
+
+        const invoiceDocType = (docTypes.results || []).find((dt: any) => dt.default_for_application) || docTypes.results?.[0];
+
+        if (!invoiceDocType) {
+          throw new Error(
+            'Elorus configuration error: no invoice document type found (application=1). ' +
+            'Please create at least one invoice document type in your Elorus account settings.'
+          );
+        }
 
         // Create invoice as draft first (same pattern as estimates — issuing directly with draft:false causes 400)
         const draftInvoice = await elorusService.createInvoice({
-          client: elorusContactId,
+          client: Number(elorusContactId),
           date: result.data.invoiceDate,
           due_days: 30,
           draft: true,
           calculator_mode: 'initial',
           currency_code: 'EUR',
-          ...(invoiceDocType && { documenttype: invoiceDocType.id }),
+          documenttype: Number(invoiceDocType.id),
           items: result.data.lineItems.map((item: any) => ({
             title: item.description,
             quantity: String(item.quantity),
