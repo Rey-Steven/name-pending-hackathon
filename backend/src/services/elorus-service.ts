@@ -27,7 +27,7 @@ export interface ElorusContact {
   default_language?: string;
   default_currency_code?: string;
   addresses: Array<{
-    address_line?: string;
+    address?: string;
     city?: string;
     state?: string;
     zip?: string;
@@ -200,7 +200,7 @@ export class ElorusService {
     is_supplier?: boolean;
     custom_id?: string;
     default_language?: string;
-    addresses?: Array<{ address_line?: string; city?: string; state?: string; zip?: string; country?: string }>;
+    addresses?: Array<{ address?: string; city?: string; state?: string; zip?: string; country?: string }>;
     email?: Array<{ email: string; primary?: boolean }>;
     phones?: Array<{ number: string; primary?: boolean }>;
   }): Promise<ElorusContact> {
@@ -417,7 +417,7 @@ export async function getOrCreateElorusContact(
     email: lead.contact_email ? [{ email: lead.contact_email, primary: true }] : [],
     phones: lead.contact_phone ? [{ number: lead.contact_phone, primary: true }] : [],
     addresses: lead.address ? [{
-      address_line: lead.address,
+      address: lead.address,
       city: lead.city || '',
       zip: lead.postal_code || '',
       country: 'GR',
