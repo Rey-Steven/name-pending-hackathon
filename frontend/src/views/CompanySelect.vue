@@ -24,7 +24,7 @@
             <div class="h-12 w-12 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center">
               <img
                 v-if="company.logo_path"
-                :src="`/uploads/${company.logo_path.replace('uploads/', '')}`"
+                :src="company.logo_path.startsWith('http') ? company.logo_path : `/uploads/${company.logo_path.replace('uploads/', '')}`"
                 class="h-12 w-12 object-contain"
               />
               <span v-else class="text-sm font-bold text-gray-500">

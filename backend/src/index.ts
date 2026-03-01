@@ -3,7 +3,6 @@ dotenv.config({ path: '../.env' });
 
 import express from 'express';
 import cors from 'cors';
-import * as path from 'path';
 import { initEmailTransport } from './services/email-transport';
 import { pollStaleLeads, pollLostDeals, pollSatisfactionEmails, pollMarketResearch, pollContentCreation, pollStaleTasks, pollElorusAcceptedEstimates, pollElorusPaidInvoices } from './services/lifecycle-poller';
 import leadsRoutes from './routes/leads.routes';
@@ -39,8 +38,20 @@ app.use('/api', (req, _res, next) => {
   next();
 });
 
-// Serve uploaded files (logos, documents)
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Proxy /uploads/* requests to R2 (backward compatibility for old paths in DB)
+app.get('/uploads/*', async (req, res) => {
+  try {
+    const { getFromR2 } = await import('./services/r2-storage');
+    // Strip the leading /uploads/ to get the R2 key
+    const key = req.path.replace(/^\/uploads\//, '');
+    const { body, contentType } = await getFromR2(key);
+    res.set('Content-Type', contentType);
+    res.set('Cache-Control', 'public, max-age=31536000');
+    res.send(body);
+  } catch (err: any) {
+    res.status(404).json({ error: 'File not found' });
+  }
+});
 
 // Initialize email transport
 initEmailTransport();

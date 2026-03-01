@@ -48,7 +48,7 @@
                   <div class="h-8 w-8 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
                     <img
                       v-if="company.logo_path"
-                      :src="`/uploads/${company.logo_path.replace('uploads/', '')}`"
+                      :src="company.logo_path.startsWith('http') ? company.logo_path : `/uploads/${company.logo_path.replace('uploads/', '')}`"
                       class="h-8 w-8 object-contain"
                     />
                     <span v-else class="text-xs font-bold text-gray-500">
