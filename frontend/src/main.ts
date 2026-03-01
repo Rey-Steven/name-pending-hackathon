@@ -39,6 +39,7 @@ const router = createRouter({
         { path: 'dashboard', name: 'dashboard', component: Dashboard },
         { path: 'leads', name: 'leads', component: LeadsList },
         { path: 'leads/new', name: 'lead-new', component: LeadForm },
+        { path: 'leads/:id/edit', name: 'lead-edit', component: LeadForm },
         { path: 'deals', name: 'deals', component: DealsList },
         { path: 'deals/:id', name: 'deal', component: DealView },
         { path: 'tasks', name: 'tasks', component: TasksList },

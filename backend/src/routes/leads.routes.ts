@@ -100,4 +100,55 @@ router.post('/', async (req: Request<{}, {}, CreateLeadRequest>, res: Response) 
   }
 });
 
+// PUT /api/leads/:id - Update lead
+router.put('/:id', async (req: Request, res: Response) => {
+  try {
+    const lead = await LeadDB.findById(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    const { companyName, contactName, contactEmail, contactPhone, vatId, gemiNumber, taxOffice, address, city, postalCode, legalForm, productInterest, companyWebsite } = req.body;
+
+    if (companyName !== undefined && !companyName) {
+      return res.status(400).json({ error: 'companyName cannot be empty' });
+    }
+    if (contactName !== undefined && !contactName) {
+      return res.status(400).json({ error: 'contactName cannot be empty' });
+    }
+
+    await LeadDB.update(req.params.id, {
+      ...(companyName !== undefined && { company_name: companyName }),
+      ...(contactName !== undefined && { contact_name: contactName }),
+      ...(contactEmail !== undefined && { contact_email: contactEmail }),
+      ...(contactPhone !== undefined && { contact_phone: contactPhone }),
+      ...(vatId !== undefined && { vat_id: vatId }),
+      ...(gemiNumber !== undefined && { gemi_number: gemiNumber }),
+      ...(taxOffice !== undefined && { tax_office: taxOffice }),
+      ...(address !== undefined && { address }),
+      ...(city !== undefined && { city }),
+      ...(postalCode !== undefined && { postal_code: postalCode }),
+      ...(legalForm !== undefined && { legal_form: legalForm }),
+      ...(productInterest !== undefined && { product_interest: productInterest }),
+      ...(companyWebsite !== undefined && { company_website: companyWebsite }),
+    });
+
+    const updated = await LeadDB.findById(req.params.id);
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /api/leads/:id - Soft-delete lead
+router.delete('/:id', async (req: Request, res: Response) => {
+  try {
+    const lead = await LeadDB.findById(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    await LeadDB.delete(req.params.id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

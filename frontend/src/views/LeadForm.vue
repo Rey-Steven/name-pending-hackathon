@@ -1,8 +1,10 @@
 <template>
   <div class="max-w-2xl mx-auto">
-    <h1 class="text-3xl font-bold text-gray-900 mb-8">New Lead</h1>
+    <h1 class="text-3xl font-bold text-gray-900 mb-8">{{ isEditMode ? 'Edit Lead' : 'New Lead' }}</h1>
 
-    <form @submit.prevent="submitLead" class="bg-white rounded-lg shadow p-6 space-y-6">
+    <div v-if="loadingLead" class="text-center py-12 text-gray-400">Loading lead…</div>
+
+    <form v-else @submit.prevent="submitLead" class="bg-white rounded-lg shadow p-6 space-y-6">
 
       <!-- Contact Info -->
       <div>
@@ -182,10 +184,10 @@
           :disabled="submitting || !form.companyName || !form.contactName"
           class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center space-x-2"
         >
-          <span v-if="submitting">Creating...</span>
-          <span v-else>Create Lead & Run Agents</span>
+          <span v-if="submitting">{{ isEditMode ? 'Saving…' : 'Creating…' }}</span>
+          <span v-else>{{ isEditMode ? 'Save Changes' : 'Create Lead & Run Agents' }}</span>
         </button>
-        <router-link :to="`/company/${$route.params.companyId}/dashboard`" class="text-gray-500 hover:text-gray-700">
+        <router-link :to="cancelTarget" class="text-gray-500 hover:text-gray-700">
           Cancel
         </router-link>
       </div>
@@ -196,7 +198,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { leadsApi, workflowApi } from '../api/client'
 import { useDashboardStore } from '../stores/dashboard'
@@ -205,7 +207,16 @@ const router = useRouter()
 const route = useRoute()
 const store = useDashboardStore()
 
+const leadId = computed(() => route.params.id as string | undefined)
+const isEditMode = computed(() => !!leadId.value)
+const cancelTarget = computed(() =>
+  isEditMode.value
+    ? `/company/${route.params.companyId}/leads`
+    : `/company/${route.params.companyId}/dashboard`
+)
+
 const submitting = ref(false)
+const loadingLead = ref(false)
 const error = ref('')
 const afmLookupState = ref<'idle' | 'loading' | 'ok' | 'error'>('idle')
 
@@ -278,21 +289,49 @@ async function submitLead() {
   error.value = ''
 
   try {
-    // 1. Create lead
-    const res = await leadsApi.create(form.value)
-    const leadId = res.data.id
-
-    // 2. Navigate to dashboard
-    router.push(`/company/${route.params.companyId}/dashboard`)
-
-    // 3. Start workflow (agents process the lead)
-    store.setWorkflowRunning(leadId)
-    await workflowApi.start(leadId)
+    if (isEditMode.value) {
+      await leadsApi.update(leadId.value!, form.value)
+      router.push(`/company/${route.params.companyId}/leads`)
+    } else {
+      const res = await leadsApi.create(form.value)
+      const newLeadId = res.data.id
+      router.push(`/company/${route.params.companyId}/dashboard`)
+      store.setWorkflowRunning(newLeadId)
+      await workflowApi.start(newLeadId)
+    }
   } catch (e: any) {
     error.value = e.response?.data?.error || e.message
-    store.isWorkflowRunning = false
+    if (!isEditMode.value) store.isWorkflowRunning = false
   } finally {
     submitting.value = false
   }
 }
+
+onMounted(async () => {
+  if (!isEditMode.value) return
+  loadingLead.value = true
+  try {
+    const { data } = await leadsApi.getById(leadId.value!)
+    form.value = {
+      companyName: data.company_name || '',
+      eponymia: '',
+      contactName: data.contact_name || '',
+      contactEmail: data.contact_email || '',
+      contactPhone: data.contact_phone || '',
+      vatId: data.vat_id || '',
+      gemiNumber: data.gemi_number || '',
+      taxOffice: data.tax_office || '',
+      address: data.address || '',
+      city: data.city || '',
+      postalCode: data.postal_code || '',
+      legalForm: data.legal_form || '',
+      productInterest: data.product_interest || '',
+      companyWebsite: data.company_website || '',
+    }
+  } catch (e: any) {
+    error.value = e.response?.data?.error || 'Failed to load lead'
+  } finally {
+    loadingLead.value = false
+  }
+})
 </script>

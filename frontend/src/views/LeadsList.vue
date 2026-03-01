@@ -69,16 +69,17 @@
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+            <th class="px-4 py-3 w-20"></th>
           </tr>
         </thead>
         <tbody class="divide-y">
           <tr
             v-for="lead in filteredLeads"
             :key="lead.id"
-            class="hover:bg-gray-50"
+            class="hover:bg-gray-50 group"
             :class="{ 'bg-blue-50': selectedIds.has(lead.id) }"
           >
-            <td class="px-4 py-3 w-8">
+            <td class="px-4 py-3 w-8" @click.stop>
               <input
                 type="checkbox"
                 :checked="selectedIds.has(lead.id)"
@@ -86,7 +87,7 @@
                 class="rounded border-gray-300 text-blue-600 cursor-pointer"
               />
             </td>
-            <td class="px-4 py-3">
+            <td class="px-4 py-3 cursor-pointer" @click="goToEdit(lead.id)">
               <div class="font-medium text-gray-900 flex items-center gap-2">
                 {{ lead.company_name }}
                 <span v-if="workflowResults[lead.id]" :class="resultClass(lead.id)" class="text-xs font-medium px-1.5 py-0.5 rounded">
@@ -95,12 +96,12 @@
               </div>
               <div v-if="lead.company_website" class="text-xs text-gray-400">{{ lead.company_website }}</div>
             </td>
-            <td class="px-4 py-3">
+            <td class="px-4 py-3 cursor-pointer" @click="goToEdit(lead.id)">
               <div>{{ lead.contact_name }}</div>
               <div class="text-xs text-gray-400">{{ lead.contact_email || '-' }}</div>
             </td>
-            <td class="px-4 py-3 text-gray-600 text-sm">{{ lead.industry || '-' }}</td>
-            <td class="px-4 py-3">
+            <td class="px-4 py-3 text-gray-600 text-sm cursor-pointer" @click="goToEdit(lead.id)">{{ lead.industry || '-' }}</td>
+            <td class="px-4 py-3 cursor-pointer" @click="goToEdit(lead.id)">
               <span
                 v-if="lead.lead_score"
                 :class="{
@@ -114,10 +115,21 @@
               </span>
               <span v-else class="text-gray-400 text-sm">-</span>
             </td>
-            <td class="px-4 py-3">
+            <td class="px-4 py-3 cursor-pointer" @click="goToEdit(lead.id)">
               <StatusBadge :status="lead.status || 'new'" />
             </td>
-            <td class="px-4 py-3 text-gray-500 text-sm">{{ formatDate(lead.created_at) }}</td>
+            <td class="px-4 py-3 text-gray-500 text-sm cursor-pointer" @click="goToEdit(lead.id)">{{ formatDate(lead.created_at) }}</td>
+            <td class="px-4 py-3 text-right" @click.stop>
+              <button
+                @click="confirmDelete(lead)"
+                class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600 transition-all p-1 rounded"
+                title="Delete lead"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -141,15 +153,44 @@
         {{ line.text }}
       </div>
     </div>
+
+    <!-- Delete confirmation modal -->
+    <div v-if="deleteTarget" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div class="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">Delete Lead</h3>
+        <p class="text-sm text-gray-600 mb-6">
+          Are you sure you want to delete <span class="font-medium">{{ deleteTarget.company_name }}</span>? This cannot be undone.
+        </p>
+        <div class="flex gap-3 justify-end">
+          <button
+            @click="deleteTarget = null"
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            @click="deleteLead"
+            :disabled="deleting"
+            class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+          >
+            {{ deleting ? 'Deleting…' : 'Delete' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { leadsApi, workflowApi } from '../api/client'
 import { formatDate } from '../utils/format'
 import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
+
+const router = useRouter()
+const route = useRoute()
 
 const leads = ref<any[]>([])
 const loading = ref(true)
@@ -161,6 +202,9 @@ const selectedIds = ref<Set<string>>(new Set())
 const workflowRunning = ref(false)
 const workflowResults = ref<Record<string, string>>({})
 const progressLog = ref<Array<{ text: string; type: 'info' | 'running' | 'success' | 'error' }>>([])
+
+const deleteTarget = ref<any | null>(null)
+const deleting = ref(false)
 
 const filteredLeads = computed(() => {
   let result = leads.value
@@ -213,6 +257,28 @@ function resultClass(id: string) {
 
 function log(text: string, type: 'info' | 'running' | 'success' | 'error' = 'info') {
   progressLog.value.push({ text, type })
+}
+
+function goToEdit(id: string) {
+  router.push(`/company/${route.params.companyId}/leads/${id}/edit`)
+}
+
+function confirmDelete(lead: any) {
+  deleteTarget.value = lead
+}
+
+async function deleteLead() {
+  if (!deleteTarget.value) return
+  deleting.value = true
+  try {
+    await leadsApi.delete(deleteTarget.value.id)
+    leads.value = leads.value.filter(l => l.id !== deleteTarget.value!.id)
+    deleteTarget.value = null
+  } catch (err: any) {
+    console.error('Delete failed:', err)
+  } finally {
+    deleting.value = false
+  }
 }
 
 async function runWorkflows() {

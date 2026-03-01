@@ -55,6 +55,22 @@ export const leadsApi = {
     productInterest?: string
     companyWebsite?: string
   }) => api.post('/leads', data),
+  update: (id: string, data: {
+    companyName?: string
+    contactName?: string
+    contactEmail?: string
+    contactPhone?: string
+    vatId?: string
+    gemiNumber?: string
+    taxOffice?: string
+    address?: string
+    city?: string
+    postalCode?: string
+    legalForm?: string
+    productInterest?: string
+    companyWebsite?: string
+  }) => api.put(`/leads/${id}`, data),
+  delete: (id: string) => api.delete(`/leads/${id}`),
 }
 
 export const dealsApi = {
