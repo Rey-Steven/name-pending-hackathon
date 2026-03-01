@@ -39,6 +39,25 @@
         </div>
       </div>
 
+      <!-- Sales Conversation -->
+      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100 bg-gray-50">
+          <h2 class="text-base font-semibold text-gray-900">💬 Sales Conversation</h2>
+          <p class="text-sm text-gray-500 mt-0.5">Controls the pacing of conversations before an offer is made.</p>
+        </div>
+        <div class="divide-y divide-gray-100">
+
+          <SettingRow
+            label="Minimum replies before offer"
+            description="How many customer replies the agent must receive before it is allowed to present any offer. During this period it focuses on understanding the lead's needs and introducing the company."
+            unit="replies"
+          >
+            <input v-model.number="form.min_replies_before_offer" type="number" min="1" max="20" v-bind="inputClass" />
+          </SettingRow>
+
+        </div>
+      </div>
+
       <!-- Deal Lifecycle -->
       <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div class="px-6 py-4 border-b border-gray-100 bg-gray-50">
@@ -224,6 +243,7 @@ const form = reactive({
   lost_deal_reopen_days: 60,
   satisfaction_email_days: 3,
   max_offer_rounds: 3,
+  min_replies_before_offer: 3,
 })
 
 const saving = ref(false)

@@ -187,6 +187,17 @@ export interface ReplyAnalysisResult extends AgentResponse {
     offerTotalAmount?: number;
     offerSummary?: string;
     failureReason?: string;
+    // Agent-built lead profile, updated after every reply
+    updatedLeadProfile?: {
+      company_background?: string;
+      stated_needs?: string[];
+      pain_points?: string[];
+      scale_volume?: string;
+      timeline?: string;
+      budget_signals?: string;
+      company_informed?: boolean;
+      next_best_action?: string;
+    } | null;
   };
 }
 

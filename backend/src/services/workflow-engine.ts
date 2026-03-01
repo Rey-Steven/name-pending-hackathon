@@ -196,7 +196,7 @@ export class WorkflowEngine {
 
     if (!deal.company_id) throw new Error(`Deal ${dealId} has no company_id`);
     const { salesAgent, emailAgent } = await this.createAgents(deal.company_id);
-    const { max_offer_rounds: MAX_OFFER_ROUNDS } = await AppSettingsDB.get();
+    const { max_offer_rounds: MAX_OFFER_ROUNDS, min_replies_before_offer: MIN_REPLIES_BEFORE_OFFER } = await AppSettingsDB.get();
 
     // Normalize legacy statuses to new stage names for the agent
     const effectiveStage =
@@ -230,6 +230,12 @@ export class WorkflowEngine {
 
     const roundNumber = (deal.negotiation_round || 0) + 1;
 
+    // Parse existing lead profile for context
+    let currentLeadProfile: Record<string, any> | null = null;
+    try {
+      if (lead.lead_profile) currentLeadProfile = JSON.parse(lead.lead_profile);
+    } catch { /* ignore parse errors — treat as no profile */ }
+
     const analysis = await salesAgent.analyzeReply({
       dealId,
       leadId: deal.lead_id,
@@ -238,7 +244,16 @@ export class WorkflowEngine {
       currentDeal: deal,
       roundNumber,
       maxRounds: MAX_OFFER_ROUNDS,
+      minRepliesBeforeOffer: MIN_REPLIES_BEFORE_OFFER,
+      currentLeadProfile,
     });
+
+    // Persist updated lead profile after each reply
+    if (analysis.data.updatedLeadProfile) {
+      await LeadDB.update(deal.lead_id, {
+        lead_profile: JSON.stringify(analysis.data.updatedLeadProfile),
+      });
+    }
 
     const { action } = analysis.data;
 

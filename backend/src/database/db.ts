@@ -57,6 +57,7 @@ export interface Lead {
   company_size?: string;
   annual_revenue?: string;
   lead_score?: 'A' | 'B' | 'C';
+  lead_profile?: string | null;  // JSON: agent-built profile, updated after each reply
   status?: string;
   created_at?: string;
   updated_at?: string;
@@ -225,6 +226,7 @@ export const LeadDB = {
       company_size: lead.company_size || null,
       annual_revenue: lead.annual_revenue || null,
       lead_score: lead.lead_score || null,
+      lead_profile: lead.lead_profile || null,
       status: lead.status || 'new',
       created_at: now,
       updated_at: now,
@@ -933,6 +935,7 @@ export interface AppSettings {
   lost_deal_reopen_days: number;        // default: 60
   satisfaction_email_days: number;      // default: 3
   max_offer_rounds: number;             // default: 3
+  min_replies_before_offer: number;     // default: 3
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -942,6 +945,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   lost_deal_reopen_days: 60,
   satisfaction_email_days: 3,
   max_offer_rounds: 3,
+  min_replies_before_offer: 3,
 };
 
 // In-memory cache with TTL for frequently read settings

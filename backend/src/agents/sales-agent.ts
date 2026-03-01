@@ -148,16 +148,24 @@ Set "qualification" to "close" — we always contact this lead. Use BANT to info
     currentDeal: any;
     roundNumber: number;
     maxRounds: number;
+    minRepliesBeforeOffer: number;
+    currentLeadProfile: Record<string, any> | null;
   }): Promise<ReplyAnalysisResult> {
-    const { dealId, leadId, dealStatus, customerReply, currentDeal, roundNumber, maxRounds } = params;
+    const { dealId, leadId, dealStatus, customerReply, currentDeal, roundNumber, maxRounds, minRepliesBeforeOffer, currentLeadProfile } = params;
     const lead = await LeadDB.findById(leadId);
     if (!lead) throw new Error(`Lead ${leadId} not found`);
 
     const isLastRound = roundNumber >= maxRounds;
+    const offerUnlocked = roundNumber >= minRepliesBeforeOffer && currentLeadProfile?.company_informed === true;
+    const offerLockedReason = roundNumber < minRepliesBeforeOffer
+      ? `reply threshold not met (${roundNumber}/${minRepliesBeforeOffer})`
+      : !currentLeadProfile?.company_informed
+        ? 'company not yet introduced to lead'
+        : null;
 
     const systemPrompt = `You are a consultative Sales AI agent handling email conversations with leads for a Greek B2B company.
 
-Your philosophy: understand before you sell. Never pitch products or name prices until you genuinely understand the lead's problem, scale, and timeline. Leads who feel understood close faster.
+Your philosophy: understand before you sell. Build a genuine relationship, understand their world, and make sure they know who we are before you ever mention pricing. Leads who feel understood close faster.
 
 === CURRENT STAGE: "${dealStatus}" ===
 
@@ -171,7 +179,7 @@ Stage definitions and STRICT valid actions:
 - "in_pipeline": We are building understanding. Use discovery questions to learn their world.
   → "discovery": Still gathering info — we don't yet know their specific need, scale, and timeline.
   → "engaged": We understand their need well enough to have a warm conversation (no pricing yet).
-  → "wants_offer": ONLY use this when ALL THREE are known: (1) specific pain/need, (2) approximate scale or volume, (3) rough timeline. If any is missing, use "discovery" instead.
+  → "wants_offer": ONLY valid when ALL conditions in GUARDRAIL 1 and GUARDRAIL 2 are satisfied AND (1) specific pain/need, (2) approximate scale or volume, (3) rough timeline are all known.
   → "declined": Lost interest.
 
 - "offer_sent": We sent a formal offer. They are responding to it.
@@ -179,6 +187,37 @@ Stage definitions and STRICT valid actions:
   → "counter": Wants to negotiate (price, terms, scope).
   → "new_offer": Declines this offer but wants a different one.
   → "declined": Firmly declines.${isLastRound ? '\n\n⚠️ FINAL ROUND: Must use "accepted" or "declined".' : ''}
+
+=== CONVERSATION GUARDRAILS ===
+
+GUARDRAIL 1 — MINIMUM EXCHANGES:
+The lead has sent ${roundNumber} ${roundNumber === 1 ? 'reply' : 'replies'}. Minimum required before any offer: ${minRepliesBeforeOffer}.
+${roundNumber < minRepliesBeforeOffer
+  ? `OFFER LOCKED — only ${roundNumber} of ${minRepliesBeforeOffer} required replies received. "wants_offer" is FORBIDDEN. Use "discovery" or "engaged".`
+  : 'Reply threshold met ✓'}
+
+GUARDRAIL 2 — COMPANY INTRODUCTION:
+Before presenting any offer, the lead must understand who we are and what we do.
+Current status: ${currentLeadProfile?.company_informed ? 'Company introduced ✓' : 'NOT YET INTRODUCED ✗'}
+${!currentLeadProfile?.company_informed
+  ? `- At a natural point in your reply, briefly describe what the company does and the value it provides. Weave it naturally into the conversation — do NOT make it feel like a sales pitch.
+- Once you have introduced the company, set company_informed: true in updatedLeadProfile.
+- "wants_offer" is FORBIDDEN until company_informed is true.`
+  : '- Already introduced — no need to repeat.'}
+
+GUARDRAIL 3 — LEAD PROFILING (REQUIRED every reply):
+After reading the lead's message, update the lead profile with everything you have learned so far.
+Build it incrementally — preserve existing knowledge and add new details. Fields to maintain:
+  • company_background: what the lead's company does
+  • stated_needs: array of specific needs they have mentioned
+  • pain_points: array of problems or frustrations they have expressed
+  • scale_volume: any indication of size, volume, or quantity
+  • timeline: any urgency or timeline hints
+  • budget_signals: any budget indicators (explicit or implicit)
+  • company_informed: true once you have introduced our company to the lead in a reply
+  • next_best_action: your concise assessment of the ideal next step
+
+${!offerUnlocked ? `⚠️ "wants_offer" is currently FORBIDDEN. Reason: ${offerLockedReason}. Focus on discovery and relationship building.` : ''}
 
 === WRITING RULES ===
 - Write ALL emails (replyBody) in Greek language
@@ -207,15 +246,34 @@ ALWAYS respond with valid JSON:
     "offerFpaAmount": null,
     "offerTotalAmount": null,
     "offerSummary": null,
-    "failureReason": null
+    "failureReason": null,
+    "updatedLeadProfile": {
+      "company_background": "what the lead's company does",
+      "stated_needs": [],
+      "pain_points": [],
+      "scale_volume": "",
+      "timeline": "",
+      "budget_signals": "",
+      "company_informed": false,
+      "next_best_action": ""
+    }
   }
 }`;
+
+    const offerStatusNote = offerUnlocked
+      ? '"wants_offer" is ALLOWED if need + scale + timeline are all known.'
+      : `"wants_offer" is FORBIDDEN. Reason: ${offerLockedReason}.`;
 
     const discoveryNote = dealStatus === 'lead_contacted'
       ? '\nNOTE: This is their FIRST reply. You MUST use action "discovery". Do not mention pricing or products.'
       : dealStatus === 'in_pipeline'
-        ? '\nNOTE: Use "wants_offer" only if you already know their specific need, scale, AND timeline from prior exchanges. Otherwise use "discovery".'
+        ? `\nNOTE: ${offerStatusNote} Otherwise use "discovery" or "engaged".`
         : '';
+
+    const profileSection = currentLeadProfile
+      ? `CURRENT LEAD PROFILE (update and return as updatedLeadProfile):
+${JSON.stringify(currentLeadProfile, null, 2)}`
+      : `CURRENT LEAD PROFILE: None yet — start building it from this first reply.`;
 
     const userPrompt = `DEAL CONTEXT:
 - Company: ${lead.company_name}
@@ -225,10 +283,17 @@ ALWAYS respond with valid JSON:
 - Round: ${roundNumber} of ${maxRounds}
 - Conversation notes so far: ${currentDeal.sales_notes || 'Cold outreach sent'}
 ${dealStatus === 'offer_sent' ? `- Offer on the table: €${currentDeal.subtotal} + FPA 24% = €${currentDeal.total_amount}` : ''}
+GUARDRAIL STATUS:
+- Replies received: ${roundNumber} / minimum before offer: ${minRepliesBeforeOffer}
+- Company introduced to lead: ${currentLeadProfile?.company_informed ? 'Yes' : 'No — must introduce before any offer'}
+- "wants_offer" allowed: ${offerUnlocked ? 'YES (if need + scale + timeline known)' : 'NO — ' + offerLockedReason}
+
+${profileSection}
+
 CUSTOMER'S REPLY:
 "${customerReply}"
 ${discoveryNote}
-Analyze this reply in stage "${dealStatus}" and decide the next action.`;
+Analyze this reply in stage "${dealStatus}" and decide the next action. Remember to include updatedLeadProfile in your response.`;
 
     console.log(`\n${'='.repeat(50)}`);
     console.log(`  📥 REPLY ANALYSIS — Stage: ${dealStatus} (round ${roundNumber}/${maxRounds})`);
