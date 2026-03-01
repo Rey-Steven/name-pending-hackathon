@@ -215,7 +215,7 @@
                 <input
                   v-model="form.elorusApiKey"
                   type="password"
-                  placeholder="Your Elorus API token"
+                  :placeholder="elorusKeyConfigured ? '••••••••  (already configured)' : 'Your Elorus API token'"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 />
               </div>
@@ -243,7 +243,7 @@
               <button
                 type="button"
                 @click="testElorusConnection"
-                :disabled="!form.elorusApiKey || !form.elorusOrganizationId || testingElorus"
+                :disabled="(!form.elorusApiKey && !elorusKeyConfigured) || !form.elorusOrganizationId || testingElorus"
                 class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 :class="elorusTestResult === true ? 'border-green-300 bg-green-50 text-green-700' : elorusTestResult === false ? 'border-red-300 bg-red-50 text-red-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'"
               >
@@ -531,7 +531,7 @@
                 <input
                   v-model="form.elorusApiKey"
                   type="password"
-                  placeholder="Your Elorus API token"
+                  :placeholder="elorusKeyConfigured ? '••••••••  (already configured)' : 'Your Elorus API token'"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
                 />
               </div>
@@ -558,7 +558,7 @@
               <button
                 type="button"
                 @click="saveElorusCreds"
-                :disabled="!form.elorusApiKey || !form.elorusOrganizationId || savingElorus"
+                :disabled="(!form.elorusApiKey && !elorusKeyConfigured) || !form.elorusOrganizationId || savingElorus"
                 class="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {{ savingElorus ? 'Saving...' : 'Save & Test Connection' }}
@@ -651,6 +651,7 @@ const savingElorus = ref(false)
 const elorusSaveSuccess = ref(false)
 const elorusSaveMessage = ref('')
 const elorusConnected = ref(false)
+const elorusKeyConfigured = ref(false)
 
 // Form data
 const form = ref({
@@ -780,11 +781,12 @@ async function testElorusConnection() {
     // Save the credentials first so the backend can use them
     const activeId = companyStore.activeCompanyId
     if (activeId) {
-      await companyApi.update({
-        elorus_api_key: form.value.elorusApiKey,
+      const updates: any = {
         elorus_organization_id: form.value.elorusOrganizationId,
         elorus_base_url: form.value.elorusBaseUrl,
-      })
+      }
+      if (form.value.elorusApiKey) updates.elorus_api_key = form.value.elorusApiKey
+      await companyApi.update(updates)
     }
     const { data } = await elorusApi.testConnection()
     if (data.success) {
@@ -807,16 +809,19 @@ async function saveElorusCreds() {
   elorusSaveMessage.value = ''
   elorusSaveSuccess.value = false
   try {
-    await companyApi.update({
-      elorus_api_key: form.value.elorusApiKey,
+    const updates: any = {
       elorus_organization_id: form.value.elorusOrganizationId,
       elorus_base_url: form.value.elorusBaseUrl,
-    })
+    }
+    if (form.value.elorusApiKey) updates.elorus_api_key = form.value.elorusApiKey
+    await companyApi.update(updates)
     const { data } = await elorusApi.testConnection()
     if (data.success) {
       elorusSaveSuccess.value = true
       elorusSaveMessage.value = 'Saved & connected!'
       elorusConnected.value = true
+      elorusKeyConfigured.value = true
+      form.value.elorusApiKey = ''
     } else {
       elorusSaveSuccess.value = false
       elorusSaveMessage.value = data.message || 'Saved but connection failed'
@@ -931,10 +936,11 @@ onMounted(async () => {
     form.value.maxDealValue = p.max_deal_value ?? null
     form.value.uniqueSellingPoints = p.unique_selling_points || ''
     form.value.communicationLanguage = p.communication_language || 'Greek'
-    form.value.elorusApiKey = (p as any).elorus_api_key || ''
+    form.value.elorusApiKey = ''
     form.value.elorusOrganizationId = (p as any).elorus_organization_id || ''
     form.value.elorusBaseUrl = (p as any).elorus_base_url || ''
-    elorusConnected.value = !!(form.value.elorusApiKey && form.value.elorusOrganizationId)
+    elorusKeyConfigured.value = !!(p as any).has_elorus_api_key
+    elorusConnected.value = !!(elorusKeyConfigured.value && form.value.elorusOrganizationId)
     try {
       form.value.keyProducts = JSON.parse(p.key_products || '[]')
     } catch {

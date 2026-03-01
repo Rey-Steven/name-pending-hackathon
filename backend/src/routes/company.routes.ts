@@ -26,9 +26,14 @@ export const upload = multer({
 // ─── Helper ───────────────────────────────────────────────────
 
 function serializeProfile(profile: any) {
+  const rawKey: string = profile.elorus_api_key || '';
   return {
     ...profile,
     agent_context_json: JSON.parse(profile.agent_context_json || '{}'),
+    elorus_api_key: rawKey
+      ? '••••••••' + rawKey.slice(-4)
+      : '',
+    has_elorus_api_key: !!rawKey,
   };
 }
 
@@ -218,7 +223,7 @@ router.put('/', async (req: Request, res: Response) => {
   if (unique_selling_points !== undefined) updates.unique_selling_points = unique_selling_points;
   if (communication_language !== undefined) updates.communication_language = communication_language;
   if (gemi_number !== undefined) updates.gemi_number = gemi_number;
-  if (elorus_api_key !== undefined) updates.elorus_api_key = elorus_api_key;
+  if (elorus_api_key !== undefined && elorus_api_key !== '') updates.elorus_api_key = elorus_api_key;
   if (elorus_organization_id !== undefined) updates.elorus_organization_id = elorus_organization_id;
   if (elorus_base_url !== undefined) updates.elorus_base_url = elorus_base_url;
   await CompanyProfileDB.update(activeId, updates);
