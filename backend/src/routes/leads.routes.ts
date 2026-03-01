@@ -1,46 +1,40 @@
 import { Router, Request, Response } from 'express';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { LeadDB, CompanyProfileDB } from '../database/db';
 import { CreateLeadRequest } from '../types';
 
-const execFileAsync = promisify(execFile);
 const router = Router();
 
-// GET /api/leads/lookup-afm?vatId=xxx - Proxy to businessportal.gr GEMI autocomplete
-// Uses system curl (macOS LibreSSL TLS fingerprint) to bypass bot detection
+const AFM_LOOKUP_URL = 'https://www.fundamenta.gr/api/search/companies';
+const FETCH_TIMEOUT_MS = 15000;
+
+// GET /api/leads/lookup-afm?vatId=xxx - Lookup company info via fundamenta.gr
 router.get('/lookup-afm', async (req: Request, res: Response) => {
   try {
     const vatId = (req.query.vatId as string)?.trim();
     if (!vatId) return res.status(400).json({ error: 'vatId is required' });
 
-    const { stdout } = await execFileAsync('curl', [
-      '--silent',
-      '--request', 'POST',
-      '--url', 'https://publicity.businessportal.gr/api/autocomplete/butler%20chat',
-      '--header', 'Accept: application/json, text/plain, */*',
-      '--header', 'Accept-Language: en-US,en;q=0.9,el;q=0.8',
-      '--header', 'Cache-Control: no-cache',
-      '--header', 'Connection: keep-alive',
-      '--header', 'Content-Type: application/json',
-      '--header', 'Cookie: next-i18next=el',
-      '--header', 'DNT: 1',
-      '--header', 'Origin: https://publicity.businessportal.gr',
-      '--header', 'Pragma: no-cache',
-      '--header', 'Referer: https://publicity.businessportal.gr/',
-      '--header', 'Sec-Fetch-Dest: empty',
-      '--header', 'Sec-Fetch-Mode: cors',
-      '--header', 'Sec-Fetch-Site: same-origin',
-      '--header', 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
-      '--header', 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"',
-      '--header', 'sec-ch-ua-mobile: ?0',
-      '--header', 'sec-ch-ua-platform: "macOS"',
-      '--data', JSON.stringify({ token: vatId, language: 'el' }),
-    ]);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
-    const data = JSON.parse(stdout);
+    const url = `${AFM_LOOKUP_URL}?q=${encodeURIComponent(vatId)}&per_page=10&filter=all`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+
+    if (!response.ok) {
+      return res.status(response.status).json({ error: `Upstream returned ${response.status}` });
+    }
+
+    const data: any = await response.json();
     res.json(data);
   } catch (error: any) {
+    if (error.name === 'AbortError') {
+      return res.status(504).json({ error: 'Upstream request timed out' });
+    }
     res.status(500).json({ error: error.message });
   }
 });

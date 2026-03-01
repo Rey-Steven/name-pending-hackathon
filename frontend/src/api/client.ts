@@ -128,6 +128,8 @@ export const contentApi = {
   trigger: (researchId?: string) => api.post('/content/trigger', { researchId }),
   updateStatus: (id: string, status: string) => api.patch(`/content/${id}/status`, { status }),
   update: (id: string, data: { post_text?: string; hashtags?: string[] }) => api.patch(`/content/${id}`, data),
+  selectImage: (id: string, imageUrl: string) => api.patch(`/content/${id}/select-image`, { image_url: imageUrl }),
+  regenerateImages: (id: string) => api.post(`/content/${id}/regenerate-images`),
 }
 
 export const gemiApi = {

@@ -287,8 +287,15 @@ For each platform, generate content that:
 2. Incorporates relevant market trends and insights from the research
 3. Aligns with the company's brand voice and target audience
 4. Includes appropriate hashtags
-5. Suggests an image concept that would complement the post
+5. Writes a DALL-E 3 image generation prompt (see rules below)
 6. Recommends the best time to post based on the platform
+
+IMAGE DESCRIPTION RULES (critical — these go directly to DALL-E 3):
+- Describe a PHOTOGRAPH or ILLUSTRATION, never an infographic, chart, diagram, or graphic design
+- NEVER include text, words, titles, headlines, labels, statistics, numbers, logos, or brand names in the description
+- Focus on: scene, subject, lighting, color palette, mood, composition, camera angle, depth of field
+- Translate abstract business concepts into visual metaphors (e.g., "growth" → "sunrise over a cityscape", "subscription model" → "a hand receiving a gift box")
+- Keep it under 150 words, be specific and vivid
 
 ALWAYS respond with valid JSON in this exact format:
 {
@@ -298,14 +305,14 @@ ALWAYS respond with valid JSON in this exact format:
     "instagram": {
       "postText": "The full Instagram caption text (use line breaks with \\n)",
       "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"],
-      "imageDescription": "Detailed description of the ideal image to accompany this post",
+      "imageDescription": "A DALL-E 3 prompt describing a photograph or illustration. No text/words/labels in the image. Focus on visual scene, lighting, mood, and composition.",
       "bestPostingTime": "e.g., Tuesday 11:00 AM",
       "tone": "e.g., inspiring, educational, casual"
     },
     "linkedin": {
       "postText": "The full LinkedIn post text (use line breaks with \\n)",
       "hashtags": ["#hashtag1", "#hashtag2"],
-      "imageDescription": "Detailed description of the ideal image or graphic",
+      "imageDescription": "A DALL-E 3 prompt describing a photograph or illustration. No text/words/labels in the image. Focus on visual scene, lighting, mood, and composition.",
       "bestPostingTime": "e.g., Wednesday 9:00 AM",
       "tone": "e.g., professional, thought-leadership"
     },

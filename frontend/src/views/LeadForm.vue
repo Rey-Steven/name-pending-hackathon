@@ -69,6 +69,18 @@
             />
           </div>
           <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Επωνυμία</label>
+            <input
+              v-model="form.eponymia"
+              type="text"
+              class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="e.g., ΕΤΑΙΡΕΙΑ Ι.Κ.Ε."
+            />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">ΓΕΜΗ (GEMI Number)</label>
             <input
               v-model="form.gemiNumber"
@@ -198,6 +210,7 @@ const afmLookupState = ref<'idle' | 'loading' | 'ok' | 'error'>('idle')
 
 const form = ref({
   companyName: '',
+  eponymia: '',
   contactName: '',
   contactEmail: '',
   contactPhone: '',
@@ -212,14 +225,6 @@ const form = ref({
   companyWebsite: '',
 })
 
-// Field name variants returned by the GEMI API
-function pick(obj: any, ...keys: string[]): string {
-  for (const k of keys) {
-    if (obj[k] != null && obj[k] !== '') return String(obj[k])
-  }
-  return ''
-}
-
 async function lookupAfm() {
   const vatId = form.value.vatId.trim()
   if (!vatId) return
@@ -229,33 +234,30 @@ async function lookupAfm() {
     const { data } = await leadsApi.lookupAfm(vatId)
     console.log('[AFM lookup] raw response:', JSON.stringify(data, null, 2))
 
-    // The API may return a single object or an array — normalise to one record
-    const record = Array.isArray(data) ? data[0] : data
+    // fundamenta.gr returns { companies: [{ document: {...} }], total_found: N }
+    const doc = data?.companies?.[0]?.document
 
-    if (!record || record.message) {
-      console.warn('[AFM lookup] no usable record:', record)
+    if (!doc) {
+      console.warn('[AFM lookup] no company found')
       afmLookupState.value = 'error'
       return
     }
 
-    // Map known field name variants to our form fields
-    const companyName = pick(record, 'eponymia', 'company_name', 'companyName', 'name', 'title', 'onomasia')
-    const gemiNumber  = pick(record, 'arithmosGemi', 'gemi', 'gemi_number', 'arithmos_gemi', 'GEMI', 'ArithmosGEMI')
-    const taxOffice   = pick(record, 'doy', 'DOY', 'tax_office', 'eforia', 'Eforia', 'doyDesc', 'DOYDesc')
-    const address     = pick(record, 'address', 'direction', 'odhos', 'Address', 'postal_address', 'postalAddress')
-    const city        = pick(record, 'city', 'polis', 'City', 'Polis', 'municipalityDesc', 'dimos')
-    const postalCode  = pick(record, 'tk', 'TK', 'postal_code', 'postalCode', 'zip', 'ZIP')
-    const legalForm   = pick(record, 'legalForm', 'legal_form', 'morfi', 'eidos', 'Morfi', 'Eidos', 'companyType', 'company_type')
-    const website     = pick(record, 'website', 'url', 'site', 'webPage', 'web_page')
+    const f = form.value
+    if (doc.name && !f.eponymia)             f.eponymia      = doc.name
+    if (doc.registry_id && !f.gemiNumber)    f.gemiNumber     = doc.registry_id
+    if (doc.legal_type && !f.legalForm)      f.legalForm      = doc.legal_type
+    if (doc.city && !f.city)                 f.city           = doc.city
+    if (doc.zip_code && !f.postalCode)       f.postalCode     = doc.zip_code
+    if (doc.email && !f.contactEmail)        f.contactEmail   = doc.email
+    if (doc.phone_number && !f.contactPhone) f.contactPhone   = doc.phone_number
+    if (doc.website && !f.companyWebsite)    f.companyWebsite = doc.website
 
-    if (companyName) form.value.companyName   = companyName
-    if (gemiNumber)  form.value.gemiNumber     = gemiNumber
-    if (taxOffice)   form.value.taxOffice      = taxOffice
-    if (address)     form.value.address        = address
-    if (city)        form.value.city           = city
-    if (postalCode)  form.value.postalCode     = postalCode
-    if (legalForm)   form.value.legalForm      = legalForm
-    if (website)     form.value.companyWebsite = website
+    // Build address from street + street_number
+    const street = doc.street?.trim() || ''
+    const number = doc.street_number?.trim() || ''
+    const addr = [street, number].filter(Boolean).join(' ')
+    if (addr && !f.address) f.address = addr
 
     afmLookupState.value = 'ok'
   } catch (err) {

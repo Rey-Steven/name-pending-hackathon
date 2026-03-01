@@ -720,6 +720,9 @@ export interface SocialContent {
   post_text: string;
   hashtags?: string;           // JSON string: string[]
   image_description?: string;
+  image_urls?: string;         // JSON string: string[] — 2 candidate image paths
+  selected_image_url?: string; // The user-chosen image path
+  image_generation_status?: 'pending' | 'generating' | 'completed' | 'failed';
   best_posting_time?: string;
   tone?: string;
   content_theme?: string;
