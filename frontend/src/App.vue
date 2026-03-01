@@ -257,11 +257,20 @@ async function switchCompany(id: string) {
   }
   await companyStore.activateCompany(id)
   switcherOpen.value = false
-  // Navigate to the same sub-page under the new company
+  // Navigate to the ROOT page of the current section (not a detail/sub-route)
   const currentPath = route.path
   const match = currentPath.match(/^\/company\/[^/]+\/(.+)$/)
   const subpath = match ? match[1] : 'dashboard'
-  router.push(`/company/${id}/${subpath}`)
+  const sectionRoots = [
+    'legal/reviews', 'legal/contracts',
+    'elorus-contacts', 'elorus-products', 'elorus-offers',
+    'dashboard', 'leads', 'deals', 'tasks', 'emails',
+    'invoices', 'research', 'content',
+  ]
+  const rootSubpath = sectionRoots.find(
+    root => subpath === root || subpath.startsWith(root + '/')
+  ) || 'dashboard'
+  router.push(`/company/${id}/${rootSubpath}`)
 }
 
 async function removeCompany(id: string) {
