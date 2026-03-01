@@ -198,7 +198,11 @@ export class WorkflowEngine {
     }
 
     const lead = await LeadDB.findById(deal.lead_id);
-    if (!lead) throw new Error(`Lead ${deal.lead_id} not found`);
+    if (!lead) {
+      console.warn(`  ⚠️  Deal #${dealId}: lead ${deal.lead_id} missing or deleted — marking closed_lost`);
+      await DealDB.update(dealId, { status: 'closed_lost', sales_notes: 'CLOSED LOST: Lead record no longer exists' });
+      return { status: 'skipped', dealId, message: `Lead ${deal.lead_id} not found — deal closed` };
+    }
 
     if (!deal.company_id) throw new Error(`Deal ${dealId} has no company_id`);
     const { salesAgent, emailAgent } = await this.createAgents(deal.company_id);

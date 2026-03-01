@@ -1,5 +1,10 @@
 import dotenv from 'dotenv';
-dotenv.config({ path: '../.env' });
+import path from 'path';
+dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: true });
+
+// Debug: verify API key is loaded
+const ak = process.env.ANTHROPIC_API_KEY;
+console.log(`🔑 ANTHROPIC_API_KEY: ${ak ? ak.slice(0, 10) + '...' + ak.slice(-4) : 'NOT SET'}`);
 
 import express from 'express';
 import cors from 'cors';
