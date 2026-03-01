@@ -517,6 +517,7 @@ export class WorkflowEngine {
             invoiceData: taskData.parsedInput.invoiceData,
             invoiceNumber: taskData.parsedInput.invoiceNumber,
             invoiceId: taskData.parsedInput.invoiceId,
+            invoicePermalink: taskData.parsedInput.invoicePermalink,
           }
         );
         await TaskQueue.complete(task.id!, { processed: true });

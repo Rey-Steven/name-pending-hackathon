@@ -531,3 +531,69 @@ export async function pollElorusAcceptedEstimates(): Promise<void> {
     pollingElorusAcceptance = false;
   }
 }
+
+// ─── Elorus Invoice Payment Polling ──────────────────────────
+// Checks all completed/closed_won deals with an elorus_invoice_id that haven't
+// been marked paid yet. When Elorus reports the invoice as 'paid', logs a payment
+// event and sends a thank-you email to the customer.
+
+let pollingElorusPaid = false;
+
+export async function pollElorusPaidInvoices(): Promise<void> {
+  if (pollingElorusPaid) return;
+  pollingElorusPaid = true;
+
+  try {
+    const companies = await CompanyProfileDB.getAll();
+
+    for (const company of companies) {
+      const elorusService = await getElorusService(company.id!);
+      if (!elorusService) continue;
+
+      const closedDeals = await DealDB.findByStatus(['completed', 'closed_won'], company.id!);
+      const unpaidDeals = closedDeals.filter(d => d.elorus_invoice_id && !d.elorus_invoice_paid);
+      if (unpaidDeals.length === 0) continue;
+
+      console.log(`\n💳 Elorus payment poll [${company.name}]: checking ${unpaidDeals.length} invoice(s)`);
+
+      const emailAgent = buildEmailAgent(company);
+
+      for (const deal of unpaidDeals) {
+        try {
+          const invoice = await elorusService.getInvoice(deal.elorus_invoice_id!);
+
+          if (invoice.status === 'paid') {
+            console.log(`  💚 Deal #${deal.id} [${deal.product_name}]: invoice paid — logging payment`);
+
+            // Mark deal as paid
+            await DealDB.update(deal.id!, { elorus_invoice_paid: true } as any);
+
+            // Send thank-you email
+            await emailAgent.sendEmail(deal.lead_id, 'payment_received', {
+              dealId: deal.id,
+              salesResult: {
+                productName: deal.product_name,
+                totalAmount: deal.total_amount,
+              },
+            });
+
+            broadcastEvent({
+              type: 'payment_received',
+              agent: 'accounting',
+              dealId: deal.id!,
+              leadId: deal.lead_id,
+              message: `Payment received — €${deal.total_amount} for ${deal.product_name}`,
+              timestamp: new Date().toISOString(),
+            });
+          }
+        } catch (err: any) {
+          console.error(`  ❌ Deal #${deal.id} payment check error:`, err.message);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error('pollElorusPaidInvoices error:', err.message);
+  } finally {
+    pollingElorusPaid = false;
+  }
+}

@@ -85,6 +85,8 @@ export interface Deal {
   elorus_estimate_id?: string;
   elorus_estimate_permalink?: string;
   elorus_invoice_id?: string;
+  elorus_invoice_permalink?: string;
+  elorus_invoice_paid?: boolean;
   created_at?: string;
   updated_at?: string;
   deleted_at?: string | null;

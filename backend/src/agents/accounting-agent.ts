@@ -107,6 +107,7 @@ Generate the full invoice and accounting entries.`;
       // Try Elorus first
       const companyId = this.companyProfile?.id;
       const elorusService = companyId ? await getElorusService(companyId) : null;
+      let invoicePermalink: string | undefined;
 
       if (elorusService) {
         // Create Elorus invoice
@@ -143,12 +144,16 @@ Generate the full invoice and accounting entries.`;
 
         // Issue the invoice (mark as non-draft)
         const invoice = await elorusService.updateInvoice(draftInvoice.id, { draft: false });
+        invoicePermalink = invoice.permalink;
 
-        // Store Elorus invoice ID on the deal
-        await DealDB.update(dealId, { elorus_invoice_id: invoice.id } as any);
-        console.log(`  📄 Elorus invoice issued: ${invoice.id}`);
+        // Store Elorus invoice ID (and permalink if available) on the deal
+        await DealDB.update(dealId, {
+          elorus_invoice_id: invoice.id,
+          ...(invoicePermalink && { elorus_invoice_permalink: invoicePermalink }),
+        } as any);
+        console.log(`  📄 Elorus invoice issued: ${invoice.id}${invoicePermalink ? ` (${invoicePermalink})` : ''}`);
 
-        await TaskQueue.complete(taskId, { elorusInvoiceId: invoice.id });
+        await TaskQueue.complete(taskId, { elorusInvoiceId: invoice.id, invoicePermalink });
       } else {
         // Fallback to local invoice storage
         console.log('  ⚠️ Elorus not configured — creating local invoice record');
@@ -189,6 +194,7 @@ Generate the full invoice and accounting entries.`;
           leadId,
           invoiceData: result.data,
           emailType: 'invoice',
+          ...(invoicePermalink && { invoicePermalink }),
         },
         dealId,
         leadId,

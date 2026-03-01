@@ -5,7 +5,7 @@ import express from 'express';
 import cors from 'cors';
 import * as path from 'path';
 import { initEmailTransport } from './services/email-transport';
-import { pollStaleLeads, pollLostDeals, pollSatisfactionEmails, pollMarketResearch, pollContentCreation, pollStaleTasks, pollElorusAcceptedEstimates } from './services/lifecycle-poller';
+import { pollStaleLeads, pollLostDeals, pollSatisfactionEmails, pollMarketResearch, pollContentCreation, pollStaleTasks, pollElorusAcceptedEstimates, pollElorusPaidInvoices } from './services/lifecycle-poller';
 import leadsRoutes from './routes/leads.routes';
 import dealsRoutes from './routes/deals.routes';
 import tasksRoutes from './routes/tasks.routes';
@@ -150,6 +150,7 @@ app.listen(PORT, () => {
     console.log(`  📡 Reply poll interval: ${settings.reply_poll_interval_minutes} min`);
     setInterval(pollForReplies, replyPollMs);
     setInterval(pollElorusAcceptedEstimates, replyPollMs); // same cadence as reply polling
+    setInterval(pollElorusPaidInvoices, replyPollMs);      // same cadence — check for paid invoices
     setInterval(pollStaleTasks, 5 * 60_000);              // every 5 minutes
     setInterval(pollStaleLeads, 6 * 3_600_000);            // every 6 hours
     setInterval(pollLostDeals, 24 * 3_600_000);            // every 24 hours
@@ -159,6 +160,7 @@ app.listen(PORT, () => {
     setInterval(pollGemiScraper, 24 * 3_600_000);          // every 24 hours
     // Run lifecycle pollers once immediately on startup
     pollElorusAcceptedEstimates();
+    pollElorusPaidInvoices();
     pollStaleTasks();
     pollStaleLeads();
     pollLostDeals();

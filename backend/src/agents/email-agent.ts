@@ -34,7 +34,7 @@ interface DirectDeliveryParams {
   body: string;
   dealId?: string;
   recipientName?: string;
-  emailType: 'cold_outreach' | 'proposal' | 'confirmation' | 'invoice' | 'follow_up' | 'satisfaction';
+  emailType: 'cold_outreach' | 'proposal' | 'confirmation' | 'invoice' | 'follow_up' | 'satisfaction' | 'payment_received';
   inReplyTo?: string;
   references?: string;
   invoiceId?: string;
@@ -83,9 +83,10 @@ Email types:
 - "cold_outreach": First contact with a new lead — introduce company, NO pricing yet
 - "proposal": Business proposal with pricing (invite customer to reply to discuss/accept)
 - "confirmation": Deal closure confirmation
-- "invoice": Invoice delivery email
+- "invoice": Invoice delivery email (may include a payment link)
 - "follow_up": Stale offer follow-up reminder (up to 3 attempts)
 - "satisfaction": Post-close satisfaction check-in (sent 3 days after deal completes)
+- "payment_received": Thank-you email after invoice is marked as paid
 
 IMPORTANT: The recipientEmail MUST be the exact email from the RECIPIENT section below. Do not make up emails.
 Keep response concise to avoid truncation:
@@ -102,13 +103,13 @@ ALWAYS respond with valid JSON in this exact format:
     "body": "full email body",
     "recipientEmail": "MUST use exact email from recipient info",
     "recipientName": "name",
-    "emailType": "cold_outreach" | "proposal" | "confirmation" | "invoice" | "follow_up" | "satisfaction"
+    "emailType": "cold_outreach" | "proposal" | "confirmation" | "invoice" | "follow_up" | "satisfaction" | "payment_received"
   }
 }`;
   }
 
-  private buildComposeUserPrompt(input: { lead: any; emailType: string; salesResult?: any; invoiceData?: any; invoiceNumber?: string }): string {
-    const { lead, emailType, salesResult, invoiceData, invoiceNumber } = input;
+  private buildComposeUserPrompt(input: { lead: any; emailType: string; salesResult?: any; invoiceData?: any; invoiceNumber?: string; invoicePermalink?: string }): string {
+    const { lead, emailType, salesResult, invoiceData, invoiceNumber, invoicePermalink } = input;
 
     let context = '';
     if (emailType === 'cold_outreach') {
@@ -151,13 +152,14 @@ Compose a confirmation email thanking the customer.`;
     } else if (emailType === 'invoice' && invoiceData) {
       context = `
 INVOICE TO SEND:
-- Invoice Number: ${invoiceNumber}
+- Invoice Number: ${invoiceNumber || 'N/A'}
 - Subtotal: €${invoiceData.subtotal}
 - FPA (24%): €${invoiceData.fpaAmount}
 - Total: €${invoiceData.totalAmount}
 - Payment Terms: ${invoiceData.paymentTerms}
 - Due Date: ${invoiceData.dueDate}
-Compose an invoice delivery email with payment instructions.`;
+${invoicePermalink ? `- Online Payment Link: ${invoicePermalink}` : ''}
+Compose an invoice delivery email. ${invoicePermalink ? 'Include the payment link prominently so the customer can pay online.' : 'Include payment instructions.'}`;
     } else if (emailType === 'follow_up' && salesResult) {
       const attempt = (salesResult.followUpCount ?? 0) + 1;
       context = `
@@ -172,6 +174,13 @@ POST-CLOSE SATISFACTION CHECK-IN:
 - Product/Service delivered: ${salesResult.productName || 'our service'}
 - Deal completed and invoice sent.
 Compose a warm check-in email that: thanks the customer for choosing us, asks if they are satisfied with the product/service, invites any feedback or questions, and mentions we are available for future needs.`;
+    } else if (emailType === 'payment_received' && salesResult) {
+      context = `
+PAYMENT RECEIVED CONFIRMATION:
+- Product/Service: ${salesResult.productName || 'our service'}
+- Amount paid: €${salesResult.totalAmount || ''}
+- Invoice has been marked as paid.
+Compose a short, warm thank-you email confirming receipt of payment and wishing them well with the product/service.`;
     } else {
       context = `
 Compose a professional follow-up email.`;
@@ -266,8 +275,8 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
 
   async sendEmail(
     leadId: string,
-    emailType: 'cold_outreach' | 'proposal' | 'confirmation' | 'invoice' | 'follow_up' | 'satisfaction',
-    context: { dealId?: string; taskId?: string; salesResult?: any; invoiceData?: any; invoiceNumber?: string; invoiceId?: string; threadWith?: { messageId: string; subject: string } }
+    emailType: 'cold_outreach' | 'proposal' | 'confirmation' | 'invoice' | 'follow_up' | 'satisfaction' | 'payment_received',
+    context: { dealId?: string; taskId?: string; salesResult?: any; invoiceData?: any; invoiceNumber?: string; invoiceId?: string; invoicePermalink?: string; threadWith?: { messageId: string; subject: string } }
   ): Promise<EmailResult> {
     this.mode = 'compose';
 

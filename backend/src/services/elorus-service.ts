@@ -134,7 +134,7 @@ export interface ElorusInvoice {
   terms?: string;
   public_notes?: string;
   permalink?: string;
-  organization: string;
+  organization?: string;
   created: string;
   modified: string;
 }

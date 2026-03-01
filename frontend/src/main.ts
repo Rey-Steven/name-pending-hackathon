@@ -24,7 +24,6 @@ import GemiCompanies from './views/GemiCompanies.vue'
 import ElorusContactsList from './views/ElorusContactsList.vue'
 import ElorusProductsList from './views/ElorusProductsList.vue'
 import ElorusOffersList from './views/ElorusOffersList.vue'
-
 const router = createRouter({
   history: createWebHistory(),
   routes: [
