@@ -412,7 +412,7 @@ export async function getOrCreateElorusContact(
     company: lead.company_name,
     first_name: firstName,
     last_name: lastName,
-    vat_number: lead.vat_id || '',
+    ...(lead.vat_id && { vat_number: lead.vat_id }),
     is_client: true,
     email: lead.contact_email ? [{ email: lead.contact_email, primary: true }] : [],
     phones: lead.contact_phone ? [{ number: lead.contact_phone, primary: true }] : [],

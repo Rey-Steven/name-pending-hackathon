@@ -191,11 +191,18 @@ router.post('/:id/approve-offer', async (req: Request, res: Response) => {
       // Create Elorus estimate
       const elorusContactId = await getOrCreateElorusContact(elorusService, lead);
 
-      // Find 24% FPA tax
-      const taxes = await elorusService.listTaxes({ active: 'true' });
+      // Fetch taxes and document types in parallel
+      const [taxes, docTypes] = await Promise.all([
+        elorusService.listTaxes({ active: 'true' }),
+        elorusService.listDocumentTypes({ application: 3, active: 'true' }),
+      ]);
+
       const fpaTax = (taxes.results || []).find(
         (t: any) => parseFloat(t.percentage || '0') === 24
       );
+
+      // Pick the default estimate document type (required to issue the estimate)
+      const estimateDocType = (docTypes.results || []).find((dt: any) => dt.default) || docTypes.results?.[0];
 
       const estimatePayload: any = {
         client: elorusContactId,
@@ -203,6 +210,7 @@ router.post('/:id/approve-offer', async (req: Request, res: Response) => {
         draft: true,
         calculator_mode: 'initial',
         currency_code: 'EUR',
+        ...(estimateDocType && { documenttype: estimateDocType.id }),
         items: [{
           title: productName,
           quantity: String(qty),
@@ -271,8 +279,9 @@ router.post('/:id/approve-offer', async (req: Request, res: Response) => {
 
     res.json({ success: true, status: 'offer_sent', totalAmount });
   } catch (error: any) {
-    console.error('Approve offer error:', error.message);
-    res.status(500).json({ error: error.message });
+    const detail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+    console.error('Approve offer error:', detail);
+    res.status(500).json({ error: detail });
   }
 });
 
