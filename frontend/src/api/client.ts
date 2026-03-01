@@ -2,8 +2,12 @@ import axios from 'axios'
 import { useCompanyStore } from '../stores/company'
 import { useToastStore } from '../stores/toast'
 
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api'
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' },
 })
 
@@ -103,7 +107,7 @@ export const companyApi = {
   getSetupStatus: () => api.get('/company/setup-status'),
   getProfile:     () => api.get('/company'),
   setup: (formData: FormData) =>
-    axios.post('/api/company/setup', formData, {
+    axios.post(`${API_BASE}/company/setup`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
   update: (data: Record<string, any>) => api.put('/company', data),
@@ -202,7 +206,7 @@ export const gemiApi = {
 
 // SSE connection for real-time events
 export function connectToEvents(onEvent: (event: any) => void): EventSource {
-  const eventSource = new EventSource('/api/dashboard/events')
+  const eventSource = new EventSource(`${API_BASE}/dashboard/events`)
 
   eventSource.onmessage = (event) => {
     try {

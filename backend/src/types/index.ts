@@ -204,7 +204,7 @@ export interface ReplyAnalysisResult extends AgentResponse {
 
 // SSE event for real-time dashboard updates
 export interface SSEEvent {
-  type: 'agent_started' | 'agent_reasoning' | 'agent_completed' | 'agent_failed' | 'workflow_completed';
+  type: 'agent_started' | 'agent_reasoning' | 'agent_completed' | 'agent_failed' | 'workflow_completed' | 'payment_received';
   agent: AgentType;
   taskId?: string;
   dealId?: string;
