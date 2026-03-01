@@ -343,6 +343,14 @@ export class ElorusService {
     return data;
   }
 
+  async updateInvoice(id: string, payload: {
+    draft?: boolean;
+    custom_id?: string;
+  }): Promise<ElorusInvoice> {
+    const { data } = await this.client.patch(`/invoices/${id}/`, payload);
+    return data;
+  }
+
   async getInvoicePDF(id: string): Promise<Buffer> {
     const { data } = await this.client.get(`/invoices/${id}/pdf/`, {
       responseType: 'arraybuffer',

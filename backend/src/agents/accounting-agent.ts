@@ -124,11 +124,12 @@ Generate the full invoice and accounting entries.`;
 
         const invoiceDocType = (docTypes.results || []).find((dt: any) => dt.default) || docTypes.results?.[0];
 
-        const invoice = await elorusService.createInvoice({
+        // Create invoice as draft first (same pattern as estimates — issuing directly with draft:false causes 400)
+        const draftInvoice = await elorusService.createInvoice({
           client: elorusContactId,
           date: result.data.invoiceDate,
           due_days: 30,
-          draft: false,
+          draft: true,
           calculator_mode: 'initial',
           currency_code: 'EUR',
           ...(invoiceDocType && { documenttype: invoiceDocType.id }),
@@ -140,9 +141,12 @@ Generate the full invoice and accounting entries.`;
           })),
         });
 
+        // Issue the invoice (mark as non-draft)
+        const invoice = await elorusService.updateInvoice(draftInvoice.id, { draft: false });
+
         // Store Elorus invoice ID on the deal
         await DealDB.update(dealId, { elorus_invoice_id: invoice.id } as any);
-        console.log(`  📄 Elorus invoice created: ${invoice.id}`);
+        console.log(`  📄 Elorus invoice issued: ${invoice.id}`);
 
         await TaskQueue.complete(taskId, { elorusInvoiceId: invoice.id });
       } else {
@@ -193,8 +197,11 @@ Generate the full invoice and accounting entries.`;
 
       return result;
     } catch (error: any) {
-      await TaskQueue.fail(taskId, error.message);
-      throw error;
+      // Surface Elorus API validation details when available
+      const detail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      console.error(`  ❌ Invoice generation failed: ${detail}`);
+      await TaskQueue.fail(taskId, detail);
+      throw new Error(detail);
     }
   }
 }
