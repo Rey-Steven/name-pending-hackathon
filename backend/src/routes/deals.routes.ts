@@ -18,6 +18,29 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/deals/pending-offers - List all offers awaiting approval
+router.get('/pending-offers', async (req: Request, res: Response) => {
+  try {
+    const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
+    if (!companyId) return res.status(400).json({ error: 'No active company' });
+
+    const offers = await PendingOfferDB.allPending(companyId);
+
+    // Enrich with lead + deal info
+    const enriched = await Promise.all(offers.map(async (offer) => {
+      const [deal, lead] = await Promise.all([
+        DealDB.findById(offer.deal_id),
+        LeadDB.findById(offer.lead_id),
+      ]);
+      return { ...offer, deal, lead };
+    }));
+
+    res.json(enriched);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /api/deals/:id - Get deal with full details
 router.get('/:id', async (req: Request, res: Response) => {
   try {
@@ -103,29 +126,6 @@ router.post('/:id/check-reply', async (req: Request, res: Response) => {
     res.json({ success: true, ...result });
   } catch (error: any) {
     console.error('Check reply error:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// GET /api/deals/pending-offers - List all offers awaiting approval
-router.get('/pending-offers', async (req: Request, res: Response) => {
-  try {
-    const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
-    if (!companyId) return res.status(400).json({ error: 'No active company' });
-
-    const offers = await PendingOfferDB.allPending(companyId);
-
-    // Enrich with lead + deal info
-    const enriched = await Promise.all(offers.map(async (offer) => {
-      const [deal, lead] = await Promise.all([
-        DealDB.findById(offer.deal_id),
-        LeadDB.findById(offer.lead_id),
-      ]);
-      return { ...offer, deal, lead };
-    }));
-
-    res.json(enriched);
-  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
