@@ -397,6 +397,10 @@ export const TaskDB = {
     const data: any = { ...rest };
     if (data.status === 'processing') data.started_at = new Date().toISOString();
     if (data.status === 'completed') data.completed_at = new Date().toISOString();
+    // Strip undefined values — Firestore rejects them
+    for (const key of Object.keys(data)) {
+      if (data[key] === undefined) delete data[key];
+    }
     await fdb().collection('tasks').doc(id).update(data);
   },
 
