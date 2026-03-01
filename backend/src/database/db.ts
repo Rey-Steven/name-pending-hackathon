@@ -266,6 +266,20 @@ export const LeadDB = {
       .get();
     return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Lead[];
   },
+
+  getExistingGemiNumbers: async (companyId: string): Promise<Set<string>> => {
+    const snap = await fdb().collection('leads')
+      .where('company_id', '==', companyId)
+      .where('deleted_at', '==', null)
+      .select('gemi_number')
+      .get();
+    const nums = new Set<string>();
+    for (const doc of snap.docs) {
+      const gn = doc.data().gemi_number;
+      if (gn) nums.add(gn);
+    }
+    return nums;
+  },
 };
 
 // ─── Deal Operations ──────────────────────────────────────────
@@ -644,6 +658,15 @@ export const LegalValidationDB = {
   },
 
   delete: async (id: string): Promise<void> => softDeleteDoc('legal_validations', id),
+
+  all: async (companyId: string): Promise<LegalValidation[]> => {
+    const snap = await fdb().collection('legal_validations')
+      .where('company_id', '==', companyId)
+      .where('deleted_at', '==', null)
+      .orderBy('created_at', 'desc')
+      .get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })) as LegalValidation[];
+  },
 };
 
 // ─── Market Research ─────────────────────────────────────────

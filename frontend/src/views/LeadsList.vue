@@ -10,6 +10,12 @@
         >
           {{ workflowRunning ? 'Running...' : `Run Workflow (${selectedIds.size})` }}
         </button>
+        <button
+          @click="showImportModal = true"
+          class="px-4 py-2 rounded-md text-sm font-medium text-white bg-purple-600 hover:bg-purple-700"
+        >
+          Import from GEMI
+        </button>
         <router-link
           :to="`/company/${$route.params.companyId}/leads/new`"
           class="px-4 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
@@ -178,6 +184,58 @@
         </div>
       </div>
     </div>
+
+    <!-- GEMI Import modal -->
+    <div v-if="showImportModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div class="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Import from GEMI</h3>
+        <p class="text-sm text-gray-600 mb-4">
+          Import active GEMI companies as new leads. Already-imported companies will be skipped.
+        </p>
+
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Number of companies</label>
+          <input
+            v-model.number="importCount"
+            type="number"
+            min="1"
+            max="500"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            placeholder="e.g. 10"
+          />
+        </div>
+
+        <div class="mb-6">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input
+              v-model="replaceEmails"
+              type="checkbox"
+              class="rounded border-gray-300 text-purple-600"
+            />
+            <span class="text-sm text-gray-700">Replace emails with test addresses</span>
+          </label>
+          <p class="text-xs text-gray-400 mt-1 ml-6">
+            Cycles through 6 predefined test email addresses.
+          </p>
+        </div>
+
+        <div class="flex gap-3 justify-end">
+          <button
+            @click="showImportModal = false"
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            @click="importFromGemi"
+            :disabled="importing || !importCount || importCount < 1"
+            class="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {{ importing ? 'Importing...' : 'Import' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -185,6 +243,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { leadsApi, workflowApi } from '../api/client'
+import { useToastStore } from '../stores/toast'
 import { formatDate } from '../utils/format'
 import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -205,6 +264,11 @@ const progressLog = ref<Array<{ text: string; type: 'info' | 'running' | 'succes
 
 const deleteTarget = ref<any | null>(null)
 const deleting = ref(false)
+
+const showImportModal = ref(false)
+const importCount = ref<number>(10)
+const replaceEmails = ref(false)
+const importing = ref(false)
 
 const filteredLeads = computed(() => {
   let result = leads.value
@@ -278,6 +342,26 @@ async function deleteLead() {
     console.error('Delete failed:', err)
   } finally {
     deleting.value = false
+  }
+}
+
+async function importFromGemi() {
+  if (importing.value || !importCount.value || importCount.value < 1) return
+  importing.value = true
+  try {
+    const res = await leadsApi.importGemi({
+      count: importCount.value,
+      replaceEmails: replaceEmails.value,
+    })
+    showImportModal.value = false
+    const toast = useToastStore()
+    toast.addToast(`Imported ${res.data.imported} leads from GEMI`, 'success')
+    const leadsRes = await leadsApi.getAll()
+    leads.value = leadsRes.data
+  } catch (err: any) {
+    console.error('GEMI import failed:', err)
+  } finally {
+    importing.value = false
   }
 }
 

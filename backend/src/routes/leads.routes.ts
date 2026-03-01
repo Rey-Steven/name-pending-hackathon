@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { LeadDB, CompanyProfileDB } from '../database/db';
+import { LeadDB, CompanyProfileDB, GemiCompanyDB } from '../database/db';
 import { CreateLeadRequest } from '../types';
 
 const router = Router();
@@ -96,6 +96,90 @@ router.post('/', async (req: Request<{}, {}, CreateLeadRequest>, res: Response) 
     const lead = await LeadDB.findById(leadId);
     res.status(201).json(lead);
   } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/leads/import-gemi - Bulk-import GEMI companies as leads
+const TEST_EMAILS = [
+  'stevenvasos@gmail.com',
+  'kagioulis.kostas@gmail.com',
+  'avothereal@gmail.com',
+  'coscoobydoo@gmail.com',
+  'k.kayioulis@butler.gr',
+  's.vasos@butler.gr',
+];
+
+router.post('/import-gemi', async (req: Request, res: Response) => {
+  try {
+    const { count, replaceEmails } = req.body;
+
+    if (!count || typeof count !== 'number' || count < 1 || count > 500) {
+      return res.status(400).json({ error: 'count must be between 1 and 500' });
+    }
+
+    const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
+    if (!companyId) return res.status(400).json({ error: 'No active company' });
+
+    // Performant dedup: fetch only gemi_number field from existing leads
+    const existingGemiNumbers = await LeadDB.getExistingGemiNumbers(companyId);
+
+    // Paginate through active GEMI companies, skipping already-imported ones
+    const collected: any[] = [];
+    let cursor: string | undefined = undefined;
+
+    while (collected.length < count) {
+      const result = await GemiCompanyDB.list({
+        limit: 50,
+        startAfter: cursor,
+        status: 'Ενεργή',
+      });
+
+      if (result.companies.length === 0) break;
+
+      for (const gc of result.companies) {
+        if (existingGemiNumbers.has(gc.gemi_number)) continue;
+        collected.push(gc);
+        if (collected.length >= count) break;
+      }
+
+      cursor = result.lastId || undefined;
+      if (!result.lastId) break;
+    }
+
+    if (collected.length === 0) {
+      return res.status(404).json({ error: 'No new active GEMI companies available to import' });
+    }
+
+    // Create leads from collected GEMI companies
+    const createdIds: string[] = [];
+    for (let i = 0; i < collected.length; i++) {
+      const gc = collected[i];
+      const contactEmail = replaceEmails
+        ? TEST_EMAILS[i % TEST_EMAILS.length]
+        : gc.email || undefined;
+
+      const leadId = await LeadDB.create({
+        company_id: companyId,
+        company_name: gc.name,
+        contact_name: gc.name,
+        contact_email: contactEmail,
+        contact_phone: gc.phone || undefined,
+        vat_id: gc.afm || undefined,
+        gemi_number: gc.gemi_number,
+        address: gc.address || undefined,
+        legal_form: gc.legal_form || undefined,
+      });
+      createdIds.push(leadId);
+    }
+
+    res.status(201).json({
+      success: true,
+      imported: createdIds.length,
+      requested: count,
+    });
+  } catch (error: any) {
+    console.error('GEMI import error:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -71,6 +71,8 @@ export const leadsApi = {
     companyWebsite?: string
   }) => api.put(`/leads/${id}`, data),
   delete: (id: string) => api.delete(`/leads/${id}`),
+  importGemi: (data: { count: number; replaceEmails: boolean }) =>
+    api.post('/leads/import-gemi', data),
 }
 
 export const dealsApi = {
@@ -116,6 +118,13 @@ export const companyApi = {
 export const invoicesApi = {
   getAll: () => api.get('/invoices'),
   getById: (id: string) => api.get(`/invoices/${id}`),
+}
+
+export const legalApi = {
+  getReviews: () => api.get('/legal/reviews'),
+  getReviewById: (id: string) => api.get(`/legal/reviews/${id}`),
+  getContracts: () => api.get('/legal/contracts'),
+  downloadContractPDF: (dealId: string) => api.get(`/legal/contracts/${dealId}/pdf`, { responseType: 'blob' }),
 }
 
 export const settingsApi = {
