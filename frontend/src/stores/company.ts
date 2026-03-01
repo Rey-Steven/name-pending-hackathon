@@ -58,6 +58,8 @@ export const useCompanyStore = defineStore('company', () => {
 
   const logoUrl = computed(() => {
     if (!profile.value?.logo_path) return null
+    // Full R2 URLs are stored directly; legacy paths fall back to /uploads/
+    if (profile.value.logo_path.startsWith('http')) return profile.value.logo_path
     return `/uploads/${profile.value.logo_path.replace('uploads/', '')}`
   })
 

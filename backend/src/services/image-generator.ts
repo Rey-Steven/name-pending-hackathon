@@ -1,10 +1,6 @@
 import OpenAI from 'openai';
-import * as fs from 'fs';
-import * as path from 'path';
 import * as https from 'https';
-
-const OUTPUT_DIR = path.join(__dirname, '../../uploads/generated-images');
-fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+import { uploadToR2 } from './r2-storage';
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
@@ -20,7 +16,7 @@ export interface GeneratedImage {
 }
 
 /**
- * Generate images using DALL-E 3 and save them locally.
+ * Generate images using DALL-E 3 and upload them to R2.
  * DALL-E 3 only supports n=1, so we loop for each image.
  */
 export async function generateImages(prompt: string, count: number = 2): Promise<GeneratedImage[]> {
@@ -48,39 +44,30 @@ export async function generateImages(prompt: string, count: number = 2): Promise
     }
 
     const filename = `${timestamp}-${uniqueId}-${i}.png`;
-    const filePath = path.join(OUTPUT_DIR, filename);
+    const buffer = await downloadToBuffer(imageUrl);
+    const r2Url = await uploadToR2(`generated-images/${filename}`, buffer, 'image/png');
 
-    await downloadFile(imageUrl, filePath);
-
-    const relativePath = `/uploads/generated-images/${filename}`;
-    results.push({ filename, relativePath });
-    console.log(`  ✅ Image ${i + 1} saved: ${relativePath}`);
+    results.push({ filename, relativePath: r2Url });
+    console.log(`  ✅ Image ${i + 1} uploaded to R2: ${r2Url}`);
   }
 
   return results;
 }
 
-function downloadFile(url: string, destPath: string): Promise<void> {
+function downloadToBuffer(url: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destPath);
     https.get(url, (response) => {
       if (response.statusCode === 301 || response.statusCode === 302) {
         const redirectUrl = response.headers.location;
         if (redirectUrl) {
-          file.close();
-          fs.unlinkSync(destPath);
-          downloadFile(redirectUrl, destPath).then(resolve).catch(reject);
+          downloadToBuffer(redirectUrl).then(resolve).catch(reject);
           return;
         }
       }
-      response.pipe(file);
-      file.on('finish', () => {
-        file.close();
-        resolve();
-      });
-    }).on('error', (err) => {
-      fs.unlink(destPath, () => {});
-      reject(err);
-    });
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk) => chunks.push(chunk));
+      response.on('end', () => resolve(Buffer.concat(chunks)));
+      response.on('error', reject);
+    }).on('error', reject);
   });
 }

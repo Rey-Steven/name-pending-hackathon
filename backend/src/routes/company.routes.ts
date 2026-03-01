@@ -1,37 +1,17 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import * as path from 'path';
-import * as fs from 'fs';
 import { CompanyProfileDB } from '../database/db';
 import { scrapeWebsite } from '../services/web-scraper';
 import { parseDocument } from '../services/document-parser';
 import { profileCompany } from '../services/company-profiler';
 import { lookupGemiKadCodes } from '../services/gemi-scraper';
+import { uploadToR2 } from '../services/r2-storage';
 
 const router = Router();
 
-// Ensure upload directories exist (multer does not auto-create them)
-[
-  path.join(__dirname, '../../uploads/logos'),
-  path.join(__dirname, '../../uploads/documents'),
-].forEach(dir => fs.mkdirSync(dir, { recursive: true }));
-
-// Configure multer storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = file.fieldname === 'logo'
-      ? path.join(__dirname, '../../uploads/logos')
-      : path.join(__dirname, '../../uploads/documents');
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
-    cb(null, `${unique}-${file.originalname}`);
-  },
-});
-
+// Use memory storage — files are uploaded to R2, not saved to disk
 export const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
   fileFilter: (_req, file, cb) => {
     const allowed = ['application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml', 'text/plain'];
@@ -80,7 +60,7 @@ router.get('/help-center', async (_req: Request, res: Response) => {
     const content = JSON.parse(profile.help_center_json);
     res.json({
       companyName: profile.name,
-      logoPath: profile.logo_path ? `/uploads/${profile.logo_path.replace('uploads/', '')}` : null,
+      logoPath: profile.logo_path || null,
       ...content,
     });
   } catch {
@@ -121,11 +101,10 @@ router.post(
         }
       }
 
-      // 2. Parse uploaded documents
+      // 2. Parse uploaded documents (from memory buffers)
       const documentTexts: string[] = [];
       for (const docFile of documentFiles) {
-        const buffer = fs.readFileSync(docFile.path);
-        const text = await parseDocument(buffer, docFile.mimetype);
+        const text = await parseDocument(docFile.buffer, docFile.mimetype);
         if (text.trim()) documentTexts.push(text);
       }
 
@@ -162,8 +141,19 @@ router.post(
         }
       }
 
-      // 5. Always create a new company document (never upsert)
-      const logoPath = logoFile ? `uploads/logos/${logoFile.filename}` : undefined;
+      // 5. Upload logo to R2 if provided
+      let logoPath: string | undefined;
+      if (logoFile) {
+        const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e6)}-${logoFile.originalname}`;
+        logoPath = await uploadToR2(`logos/${uniqueName}`, logoFile.buffer, logoFile.mimetype);
+        console.log(`  📤 Logo uploaded to R2: ${logoPath}`);
+      }
+
+      // Upload documents to R2 as well
+      for (const docFile of documentFiles) {
+        const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e6)}-${docFile.originalname}`;
+        await uploadToR2(`documents/${uniqueName}`, docFile.buffer, docFile.mimetype);
+      }
 
       const newId = await CompanyProfileDB.create({
         name,
