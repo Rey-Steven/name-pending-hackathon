@@ -195,6 +195,7 @@ export interface CompanyProfile {
   key_products?: string;           // JSON: [{ name, description, price? }]
   unique_selling_points?: string;  // free-text bullet points
   communication_language?: string; // 'Greek' | 'English' | 'Greek and English'
+  gemi_number?: string;            // GEMI registry number (e.g. "123456703000")
   created_at?: string;
   updated_at?: string;
   deleted_at?: string | null;
@@ -1053,6 +1054,7 @@ export const CompanyProfileDB = {
       key_products: profile.key_products || null,
       unique_selling_points: profile.unique_selling_points || null,
       communication_language: profile.communication_language || 'Greek',
+      gemi_number: profile.gemi_number || null,
       created_at: now,
       updated_at: now,
       deleted_at: null,

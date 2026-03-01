@@ -1,4 +1,5 @@
 import { GemiCompanyDB, GemiScraperStateDB, GemiCompany, GemiScraperState } from '../database/db';
+import { KadCode } from './company-profiler';
 
 // ─── Constants ──────────────────────────────────────────────────
 
@@ -310,4 +311,40 @@ export async function stopGemiScraper(): Promise<{ stopped: boolean; message: st
 export async function getGemiScraperStatus(): Promise<GemiScraperState & { is_running: boolean }> {
   const state = await GemiScraperStateDB.get();
   return { ...state, is_running: scrapingGemi };
+}
+
+// ─── Single-company KAD lookup ──────────────────────────────────
+
+/**
+ * Given a GEMI number, fetch the company from the GEMI API
+ * and return its KAD codes in the unified KadCode[] format.
+ * Returns null if the lookup fails or the number is invalid.
+ */
+export async function lookupGemiKadCodes(gemiNumber: string): Promise<KadCode[] | null> {
+  const result = await fetchGemiCompany(gemiNumber);
+  if (!result.success || !result.data) return null;
+
+  // Parse GEMI number: XXXXXXXYYZZZ (7-digit company + 2-digit chamber + branch)
+  const companyIdNum = parseInt(gemiNumber.substring(0, 7), 10);
+  const chamberId = parseInt(gemiNumber.substring(7, 9), 10);
+
+  const parsed = parseGemiResponse(result.data, gemiNumber, companyIdNum, chamberId);
+
+  const kadCodes: KadCode[] = [];
+
+  if (parsed.kad_primary) {
+    try {
+      const primary = JSON.parse(parsed.kad_primary);
+      kadCodes.push({ code: primary.code, description: primary.description });
+    } catch { /* skip malformed */ }
+  }
+
+  if (parsed.kad_secondary) {
+    try {
+      const secondary: KadCode[] = JSON.parse(parsed.kad_secondary);
+      kadCodes.push(...secondary);
+    } catch { /* skip malformed */ }
+  }
+
+  return kadCodes.length > 0 ? kadCodes : null;
 }

@@ -57,6 +57,18 @@
           </div>
 
           <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">GEMI Number</label>
+            <input
+              v-model="form.gemiNumber"
+              type="text"
+              placeholder="e.g. 123456703000"
+              maxlength="12"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p class="text-xs text-gray-400 mt-1">Optional — if provided, we'll fetch your real KAD codes from the Greek Business Registry (GEMI)</p>
+          </div>
+
+          <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Describe your company</label>
             <textarea
               v-model="form.userText"
@@ -288,7 +300,7 @@
       <div v-if="currentStep === 4" class="p-8 text-center">
         <div class="text-6xl mb-6 animate-bounce">🤖</div>
         <h2 class="text-xl font-semibold text-gray-900 mb-2">Building your AI team...</h2>
-        <p class="text-gray-500 text-sm mb-8">This usually takes 15-30 seconds</p>
+        <p class="text-gray-500 text-sm mb-8">This usually takes 30-120 seconds</p>
 
         <div class="space-y-3 text-left max-w-sm mx-auto">
           <div
@@ -399,7 +411,15 @@
           <!-- KAD Codes -->
           <div v-if="parsedKadCodes.length > 0" class="bg-gray-50 rounded-xl p-4">
             <div class="flex items-center justify-between mb-2">
-              <p class="text-sm font-semibold text-gray-700">🏛️ KAD Codes (Greek Business Activity)</p>
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-semibold text-gray-700">🏛️ KAD Codes (Greek Business Activity)</p>
+                <span
+                  v-if="companyStore.profile?.gemi_number"
+                  class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium"
+                >
+                  GEMI verified
+                </span>
+              </div>
               <button v-if="isEditMode" @click="editingKad = !editingKad" class="text-xs text-blue-600 hover:underline">
                 {{ editingKad ? 'Cancel' : 'Edit' }}
               </button>
@@ -509,6 +529,7 @@ const form = ref({
   name: '',
   website: '',
   industry: '',
+  gemiNumber: '',
   userText: '',
   pricingModel: '',
   minDealValue: null as number | null,
@@ -634,6 +655,7 @@ async function startAnalysis() {
     fd.append('name', form.value.name)
     if (form.value.website) fd.append('website', form.value.website)
     if (form.value.industry) fd.append('industry', form.value.industry)
+    if (form.value.gemiNumber) fd.append('gemiNumber', form.value.gemiNumber)
     if (form.value.userText) fd.append('userText', form.value.userText)
     if (form.value.pricingModel) fd.append('pricingModel', form.value.pricingModel)
     if (form.value.minDealValue != null) fd.append('minDealValue', String(form.value.minDealValue))
@@ -710,6 +732,7 @@ onMounted(async () => {
     form.value.name = p.name
     form.value.website = p.website || ''
     form.value.industry = p.industry || ''
+    form.value.gemiNumber = p.gemi_number || ''
     form.value.pricingModel = p.pricing_model || ''
     form.value.minDealValue = p.min_deal_value ?? null
     form.value.maxDealValue = p.max_deal_value ?? null

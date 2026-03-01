@@ -6,6 +6,7 @@ import { CompanyProfileDB } from '../database/db';
 import { scrapeWebsite } from '../services/web-scraper';
 import { parseDocument } from '../services/document-parser';
 import { profileCompany } from '../services/company-profiler';
+import { lookupGemiKadCodes } from '../services/gemi-scraper';
 
 const router = Router();
 
@@ -98,6 +99,7 @@ router.post(
         name, website, industry, userText,
         pricingModel, minDealValue, maxDealValue,
         keyProducts, uniqueSellingPoints, communicationLanguage,
+        gemiNumber,
       } = req.body;
 
       if (!name) {
@@ -143,7 +145,24 @@ router.post(
         communicationLanguage,
       });
 
-      // 4. Always create a new company document (never upsert)
+      // 4. If GEMI number provided, fetch real KAD codes
+      let kadCodes: Array<{ code: string; description: string }> = [];
+      if (gemiNumber) {
+        console.log(`  🏛️ Looking up GEMI KAD codes for: ${gemiNumber}`);
+        try {
+          const gemiKadCodes = await lookupGemiKadCodes(gemiNumber);
+          if (gemiKadCodes && gemiKadCodes.length > 0) {
+            kadCodes = gemiKadCodes;
+            console.log(`  ✅ Found ${gemiKadCodes.length} real KAD codes from GEMI`);
+          } else {
+            console.warn(`  ⚠️ GEMI lookup returned no KAD codes`);
+          }
+        } catch (err: any) {
+          console.warn(`  ⚠️ GEMI KAD lookup failed:`, err.message);
+        }
+      }
+
+      // 5. Always create a new company document (never upsert)
       const logoPath = logoFile ? `uploads/logos/${logoFile.filename}` : undefined;
 
       const newId = await CompanyProfileDB.create({
@@ -159,7 +178,7 @@ router.post(
         user_provided_text: userText || undefined,
         raw_scraped_data: scrapedText || undefined,
         agent_context_json: JSON.stringify(profileResult.agentContexts),
-        kad_codes: JSON.stringify(profileResult.kad_codes ?? []),
+        kad_codes: JSON.stringify(kadCodes),
         help_center_json: JSON.stringify(profileResult.help_center_content ?? {}),
         pricing_model: pricingModel || undefined,
         min_deal_value: minDealValue ? Number(minDealValue) : undefined,
@@ -167,6 +186,7 @@ router.post(
         key_products: keyProducts || undefined,
         unique_selling_points: uniqueSellingPoints || undefined,
         communication_language: communicationLanguage || 'Greek',
+        gemi_number: gemiNumber || undefined,
         setup_complete: true,
       } as any);
 
@@ -190,6 +210,7 @@ router.put('/', async (req: Request, res: Response) => {
     name, website, industry, kad_codes,
     pricing_model, min_deal_value, max_deal_value,
     key_products, unique_selling_points, communication_language,
+    gemi_number,
   } = req.body;
   const updates: any = {};
   if (name !== undefined) updates.name = name;
@@ -202,6 +223,7 @@ router.put('/', async (req: Request, res: Response) => {
   if (key_products !== undefined) updates.key_products = key_products;
   if (unique_selling_points !== undefined) updates.unique_selling_points = unique_selling_points;
   if (communication_language !== undefined) updates.communication_language = communication_language;
+  if (gemi_number !== undefined) updates.gemi_number = gemi_number;
   await CompanyProfileDB.update(activeId, updates);
   res.json({ success: true });
 });
@@ -235,6 +257,20 @@ router.post('/rescrape', async (_req: Request, res: Response) => {
       communicationLanguage: profile.communication_language,
     });
 
+    // Re-fetch GEMI KAD codes if the profile has a stored GEMI number
+    let kadCodes: Array<{ code: string; description: string }> = [];
+    if (profile.gemi_number) {
+      console.log(`  🏛️ Re-fetching GEMI KAD codes for: ${profile.gemi_number}`);
+      try {
+        const gemiKadCodes = await lookupGemiKadCodes(profile.gemi_number);
+        if (gemiKadCodes && gemiKadCodes.length > 0) {
+          kadCodes = gemiKadCodes;
+        }
+      } catch (err: any) {
+        console.warn(`  ⚠️ GEMI re-fetch failed:`, err.message);
+      }
+    }
+
     await CompanyProfileDB.update(activeId, {
       industry: profileResult.industry,
       description: profileResult.description,
@@ -244,7 +280,7 @@ router.post('/rescrape', async (_req: Request, res: Response) => {
       geographic_focus: profileResult.geographic_focus,
       raw_scraped_data: scrapedText || undefined,
       agent_context_json: JSON.stringify(profileResult.agentContexts),
-      kad_codes: JSON.stringify(profileResult.kad_codes ?? []),
+      kad_codes: JSON.stringify(kadCodes),
       help_center_json: JSON.stringify(profileResult.help_center_content ?? {}),
     });
 

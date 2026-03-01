@@ -19,7 +19,6 @@ export interface CompanyProfileResult {
   products_services: string;
   geographic_focus: string;
   agentContexts: AgentCompanyContexts;
-  kad_codes: KadCode[];
   help_center_content: HelpCenterContent;
 }
 
@@ -43,7 +42,7 @@ const SYSTEM_PROMPT = `You are a business intelligence analyst. Given informatio
 
 Your output will be used to customize AI agents that run the company's operations (marketing, sales, legal, accounting, email).
 
-Also suggest 3–5 Greek KAD codes (Κωδικός Αριθμός Δραστηριότητας) that match this company's business activities, and generate 6–8 customer-facing FAQ entries for a help center page.
+Also generate 6–8 customer-facing FAQ entries for a help center page.
 
 ALWAYS respond with valid JSON in this exact format:
 {
@@ -60,9 +59,6 @@ ALWAYS respond with valid JSON in this exact format:
     "accounting": "Detailed guidance for the Accounting agent: currency and tax jurisdiction, applicable VAT/tax rates, invoice format requirements, typical payment terms for this industry, standard line item descriptions for their products/services, accounting treatment specifics",
     "email": "Detailed guidance for the Email agent: language and locale for communications, appropriate tone and formality level for their industry/customers, key value propositions to reference, company voice and brand guidelines inferred from the above, how to address customers (formal/informal)"
   },
-  "kad_codes": [
-    { "code": "6201", "description": "Computer programming activities" }
-  ],
   "help_center_content": {
     "intro": "2-3 sentence welcome paragraph for the public help center, written from the company's perspective",
     "faqs": [

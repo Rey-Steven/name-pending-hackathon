@@ -32,6 +32,7 @@ export interface CompanyProfile {
   key_products?: string
   unique_selling_points?: string
   communication_language?: string
+  gemi_number?: string
 }
 
 export interface CompanySummary {
