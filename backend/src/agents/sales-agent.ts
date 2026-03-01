@@ -75,50 +75,67 @@ Set "qualification" to "close" — we always contact this lead. Use BANT to info
     const lead = await LeadDB.findById(leadId);
     if (!lead) throw new Error(`Lead ${leadId} not found`);
 
-    const result = await this.execute<SalesResult>({ lead, marketingResult }, { leadId });
-
-    // Always force qualification to close — BANT is informational only
-    result.data.qualification = 'close';
-
-    // Pricing deferred — set to 0 until customer expresses interest and we understand their needs.
-    // Actual pricing is calculated when the customer replies and triggers wants_offer/counter/new_offer.
-    const dealId = await DealDB.create({
-      company_id: this.companyProfile?.id,
-      lead_id: leadId,
-      deal_value: 0,
-      product_name: result.data.productName,
-      quantity: 0,
-      subtotal: 0,
-      fpa_rate: 0.24,
-      fpa_amount: 0,
-      total_amount: 0,
-      qualification_result: JSON.stringify({
-        budget: result.data.budget,
-        authority: result.data.authority,
-        need: result.data.need,
-        timeline: result.data.timeline,
-      }),
-      sales_notes: result.data.proposalSummary,
-      negotiation_round: 0,
-      status: 'lead_contacted',
-    });
-
-    await LeadDB.update(leadId, { status: 'contacted' });
-
-    // Queue cold outreach email — first contact, no pricing
-    await TaskQueue.createTask({
+    const taskId = await TaskQueue.createAndTrack({
       sourceAgent: 'sales',
-      targetAgent: 'email',
-      taskType: 'send_proposal',
-      title: `Cold outreach: ${lead.company_name}`,
-      description: `First contact — ${result.data.proposalSummary}`,
-      inputData: { dealId, leadId, salesResult: result.data, emailType: 'cold_outreach' },
-      dealId,
+      targetAgent: 'sales',
+      taskType: 'process_deal',
+      title: `Process deal: ${lead.company_name}`,
+      inputData: { leadId },
       leadId,
       companyId: this.companyProfile?.id,
     });
 
-    return { salesResult: result, dealId };
+    try {
+      const result = await this.execute<SalesResult>({ lead, marketingResult }, { leadId, taskId });
+
+      // Always force qualification to close — BANT is informational only
+      result.data.qualification = 'close';
+
+      // Pricing deferred — set to 0 until customer expresses interest and we understand their needs.
+      // Actual pricing is calculated when the customer replies and triggers wants_offer/counter/new_offer.
+      const dealId = await DealDB.create({
+        company_id: this.companyProfile?.id,
+        lead_id: leadId,
+        deal_value: 0,
+        product_name: result.data.productName,
+        quantity: 0,
+        subtotal: 0,
+        fpa_rate: 0.24,
+        fpa_amount: 0,
+        total_amount: 0,
+        qualification_result: JSON.stringify({
+          budget: result.data.budget,
+          authority: result.data.authority,
+          need: result.data.need,
+          timeline: result.data.timeline,
+        }),
+        sales_notes: result.data.proposalSummary,
+        negotiation_round: 0,
+        status: 'lead_contacted',
+      });
+
+      await LeadDB.update(leadId, { status: 'contacted' });
+
+      await TaskQueue.complete(taskId, { dealId, action: 'deal_created' });
+
+      // Queue cold outreach email — first contact, no pricing
+      await TaskQueue.createTask({
+        sourceAgent: 'sales',
+        targetAgent: 'email',
+        taskType: 'send_proposal',
+        title: `Cold outreach: ${lead.company_name}`,
+        description: `First contact — ${result.data.proposalSummary}`,
+        inputData: { dealId, leadId, salesResult: result.data, emailType: 'cold_outreach' },
+        dealId,
+        leadId,
+        companyId: this.companyProfile?.id,
+      });
+
+      return { salesResult: result, dealId };
+    } catch (error: any) {
+      await TaskQueue.fail(taskId, error.message);
+      throw error;
+    }
   }
 
   // ─── Phase 2: Analyze inbound customer reply ──────────────────
@@ -218,9 +235,21 @@ Analyze this reply in stage "${dealStatus}" and decide the next action.`;
     console.log(`  📋 Deal #${dealId} — ${lead.company_name}`);
     console.log(`${'='.repeat(50)}`);
 
+    const taskId = await TaskQueue.createAndTrack({
+      sourceAgent: 'sales',
+      targetAgent: 'sales',
+      taskType: 'analyze_reply',
+      title: `Analyze reply: ${lead.company_name} (${dealStatus})`,
+      inputData: { dealId, dealStatus, roundNumber },
+      dealId,
+      leadId,
+      companyId: this.companyProfile?.id,
+    });
+
     broadcastEvent({
       type: 'agent_started',
       agent: 'sales',
+      taskId,
       dealId,
       leadId,
       message: `Analyzing customer reply — stage: ${dealStatus}`,
@@ -250,6 +279,7 @@ Analyze this reply in stage "${dealStatus}" and decide the next action.`;
       broadcastEvent({
         type: 'agent_completed',
         agent: 'sales',
+        taskId,
         dealId,
         leadId,
         message: `Reply analyzed: ${result.data.action} — ${result.decision}`,
@@ -266,6 +296,8 @@ Analyze this reply in stage "${dealStatus}" and decide the next action.`;
         intent: result.data.customerIntent,
       });
 
+      await TaskQueue.complete(taskId, { action: result.data.action, sentiment: result.data.customerSentiment });
+
       return result;
     } catch (error: any) {
       console.error(`  ❌ Reply analysis failed: ${error.message}`);
@@ -273,11 +305,14 @@ Analyze this reply in stage "${dealStatus}" and decide the next action.`;
       broadcastEvent({
         type: 'agent_failed',
         agent: 'sales',
+        taskId,
         dealId,
         leadId,
         message: `Reply analysis failed: ${error.message}`,
         timestamp: new Date().toISOString(),
       });
+
+      await TaskQueue.fail(taskId, error.message);
 
       throw error;
     }

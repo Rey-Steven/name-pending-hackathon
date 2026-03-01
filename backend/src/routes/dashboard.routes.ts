@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { LeadDB, DealDB, TaskDB, InvoiceDB, EmailDB, AuditLog, CompanyProfileDB, MarketResearchDB, SocialContentDB } from '../database/db';
 import { SSEEvent } from '../types';
+import { TaskLogger } from '../services/task-logger';
 
 const router = Router();
 
@@ -122,6 +123,18 @@ export function broadcastEvent(event: SSEEvent) {
   const data = JSON.stringify(event);
   for (const client of sseClients) {
     client.write(`data: ${data}\n\n`);
+  }
+
+  // Persist log entry if this event is associated with a tracked task
+  if (event.taskId && TaskLogger.has(event.taskId)) {
+    TaskLogger.append(event.taskId, {
+      type: event.type as any,
+      agent: event.agent,
+      message: event.message,
+      reasoning: event.reasoning,
+      data: event.data,
+      timestamp: event.timestamp,
+    });
   }
 }
 

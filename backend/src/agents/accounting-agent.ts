@@ -86,52 +86,70 @@ Generate the full invoice and accounting entries.`;
     const lead = await LeadDB.findById(leadId);
     if (!lead) throw new Error(`Lead ${leadId} not found`);
 
-    const result = await this.execute<AccountingResult>(
-      { dealId, lead, salesResult },
-      { dealId, leadId }
-    );
-
-    const invoiceNumber = await InvoiceDB.getNextInvoiceNumber();
-
-    const invoiceId = await InvoiceDB.create({
-      company_id: this.companyProfile?.id,
-      deal_id: dealId,
-      invoice_number: invoiceNumber,
-      invoice_date: result.data.invoiceDate,
-      due_date: result.data.dueDate,
-      customer_name: lead.company_name,
-      customer_afm: `${100000000 + Math.floor(Math.random() * 900000000)}`,
-      customer_doy: 'ΔΟΥ Αθηνών',
-      customer_address: 'Αθήνα, Ελλάδα',
-      customer_email: lead.contact_email || '',
-      line_items: JSON.stringify(result.data.lineItems),
-      subtotal: result.data.subtotal,
-      fpa_rate: result.data.fpaRate,
-      fpa_amount: result.data.fpaAmount,
-      total_amount: result.data.totalAmount,
-      payment_terms: result.data.paymentTerms,
-      status: 'draft',
-    });
-
-    await TaskQueue.createTask({
+    const taskId = await TaskQueue.createAndTrack({
       sourceAgent: 'accounting',
-      targetAgent: 'email',
-      taskType: 'send_invoice',
-      title: `Send invoice ${invoiceNumber}: ${lead.company_name}`,
-      description: `Invoice amount: €${result.data.totalAmount.toFixed(2)}`,
-      inputData: {
-        dealId,
-        leadId,
-        invoiceId,
-        invoiceNumber,
-        invoiceData: result.data,
-        emailType: 'invoice',
-      },
+      targetAgent: 'accounting',
+      taskType: 'generate_invoice',
+      title: `Generate invoice: deal #${dealId}`,
+      inputData: { dealId },
       dealId,
       leadId,
       companyId: this.companyProfile?.id,
     });
 
-    return result;
+    try {
+      const result = await this.execute<AccountingResult>(
+        { dealId, lead, salesResult },
+        { dealId, leadId, taskId }
+      );
+
+      const invoiceNumber = await InvoiceDB.getNextInvoiceNumber();
+
+      const invoiceId = await InvoiceDB.create({
+        company_id: this.companyProfile?.id,
+        deal_id: dealId,
+        invoice_number: invoiceNumber,
+        invoice_date: result.data.invoiceDate,
+        due_date: result.data.dueDate,
+        customer_name: lead.company_name,
+        customer_afm: `${100000000 + Math.floor(Math.random() * 900000000)}`,
+        customer_doy: 'ΔΟΥ Αθηνών',
+        customer_address: 'Αθήνα, Ελλάδα',
+        customer_email: lead.contact_email || '',
+        line_items: JSON.stringify(result.data.lineItems),
+        subtotal: result.data.subtotal,
+        fpa_rate: result.data.fpaRate,
+        fpa_amount: result.data.fpaAmount,
+        total_amount: result.data.totalAmount,
+        payment_terms: result.data.paymentTerms,
+        status: 'draft',
+      });
+
+      await TaskQueue.complete(taskId, { invoiceId, invoiceNumber });
+
+      await TaskQueue.createTask({
+        sourceAgent: 'accounting',
+        targetAgent: 'email',
+        taskType: 'send_invoice',
+        title: `Send invoice ${invoiceNumber}: ${lead.company_name}`,
+        description: `Invoice amount: €${result.data.totalAmount.toFixed(2)}`,
+        inputData: {
+          dealId,
+          leadId,
+          invoiceId,
+          invoiceNumber,
+          invoiceData: result.data,
+          emailType: 'invoice',
+        },
+        dealId,
+        leadId,
+        companyId: this.companyProfile?.id,
+      });
+
+      return result;
+    } catch (error: any) {
+      await TaskQueue.fail(taskId, error.message);
+      throw error;
+    }
   }
 }

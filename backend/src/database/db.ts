@@ -81,6 +81,7 @@ export interface Task {
   input_data?: string;
   output_data?: string;
   error_message?: string;
+  logs?: string;
   status?: 'pending' | 'processing' | 'completed' | 'failed';
   priority?: number;
   created_at?: string;
@@ -305,6 +306,7 @@ export const TaskDB = {
       input_data: task.input_data || null,
       output_data: null,
       error_message: null,
+      logs: null,
       status: task.status || 'pending',
       priority: task.priority || 0,
       created_at: now,

@@ -4,15 +4,22 @@ export type AgentType = 'marketing' | 'sales' | 'legal' | 'accounting' | 'email'
 // Task types that agents create for each other
 export type TaskType =
   | 'qualify_lead'       // Marketing → Sales
-  | 'close_deal'         // Sales internal
-  | 'review_contract'    // Sales → Legal
-  | 'generate_invoice'   // Sales → Accounting
+  | 'lead_enrichment'    // Marketing → Marketing
+  | 'market_research'    // Marketing → Marketing
+  | 'content_creation'   // Marketing → Marketing
+  | 'process_deal'       // Sales → Sales
+  | 'analyze_reply'      // Sales → Sales
+  | 'legal_review'       // Legal → Legal
+  | 'generate_invoice'   // Accounting → Accounting
   | 'send_proposal'      // Sales → Email
   | 'send_invoice'       // Accounting → Email
+  | 'send_email'         // Email → Email (poller-triggered sends)
+  | 'deliver_email'      // Email → Email (direct delivery)
+  | 'reopen_deal'        // Sales → Marketing
+  | 'close_deal'         // Sales internal
+  | 'review_contract'    // Sales → Legal
   | 'send_confirmation'  // Sales → Email
-  | 'send_follow_up'     // Any → Email
-  | 'market_research'    // Marketing (daily research)
-  | 'content_creation';  // Marketing (daily content)
+  | 'send_follow_up';    // Any → Email
 
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type LeadScore = 'A' | 'B' | 'C';
