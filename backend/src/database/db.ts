@@ -199,6 +199,7 @@ export interface CompanyProfile {
   key_products?: string;           // JSON: [{ name, description, price? }]
   unique_selling_points?: string;  // free-text bullet points
   communication_language?: string; // 'Greek' | 'English' | 'Greek and English'
+  terms_of_service?: string | null; // Plain-text standard service agreement template (AI-generated at setup)
   gemi_number?: string;            // GEMI registry number (e.g. "123456703000")
   elorus_api_key?: string;         // Elorus API key (per-company)
   elorus_organization_id?: string; // Elorus organization ID (per-company)
@@ -1084,6 +1085,7 @@ export const CompanyProfileDB = {
       key_products: profile.key_products || null,
       unique_selling_points: profile.unique_selling_points || null,
       communication_language: profile.communication_language || 'Greek',
+      terms_of_service: profile.terms_of_service || null,
       gemi_number: profile.gemi_number || null,
       elorus_api_key: profile.elorus_api_key || null,
       elorus_organization_id: profile.elorus_organization_id || null,

@@ -186,6 +186,7 @@ router.post(
         key_products: keyProducts || undefined,
         unique_selling_points: uniqueSellingPoints || undefined,
         communication_language: communicationLanguage || 'Greek',
+        terms_of_service: profileResult.terms_of_service || undefined,
         gemi_number: gemiNumber || undefined,
         elorus_api_key: elorusApiKey || undefined,
         elorus_organization_id: elorusOrganizationId || undefined,

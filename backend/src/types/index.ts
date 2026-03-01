@@ -91,6 +91,7 @@ export interface LegalResult extends AgentResponse {
     riskFlags: string[];
     approvalStatus: 'approved' | 'rejected' | 'review_required';
     notes: string;
+    contractText?: string;  // Full service contract text to be sent as PDF
   };
 }
 
@@ -259,6 +260,7 @@ export interface CompanyProfileContext {
   key_products?: string;
   unique_selling_points?: string;
   communication_language?: string;
+  terms_of_service?: string;
 }
 
 // API request bodies

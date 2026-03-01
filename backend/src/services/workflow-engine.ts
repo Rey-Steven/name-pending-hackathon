@@ -33,6 +33,7 @@ async function loadCompanyProfile(companyId: string): Promise<CompanyProfileCont
       key_products: raw.key_products,
       unique_selling_points: raw.unique_selling_points,
       communication_language: raw.communication_language,
+      terms_of_service: raw.terms_of_service || undefined,
     };
   } catch {
     return null;
@@ -436,6 +437,7 @@ export class WorkflowEngine {
       fpaRate: deal.fpa_rate || 0.24,
       fpaAmount: deal.fpa_amount,
       totalAmount: deal.total_amount,
+      proposalSummary: deal.sales_notes || `${deal.product_name} — standard service agreement`,
     };
 
     try {

@@ -112,11 +112,17 @@ Generate the full invoice and accounting entries.`;
         // Create Elorus invoice
         const elorusContactId = await getOrCreateElorusContact(elorusService, lead);
 
-        // Find 24% FPA tax
-        const taxes = await elorusService.listTaxes({ active: 'true' });
+        // Fetch taxes and invoice document types in parallel
+        const [taxes, docTypes] = await Promise.all([
+          elorusService.listTaxes({ active: 'true' }),
+          elorusService.listDocumentTypes({ application: 1, active: 'true' }),
+        ]);
+
         const fpaTax = (taxes.results || []).find(
           (t: any) => parseFloat(t.percentage || '0') === 24
         );
+
+        const invoiceDocType = (docTypes.results || []).find((dt: any) => dt.default) || docTypes.results?.[0];
 
         const invoice = await elorusService.createInvoice({
           client: elorusContactId,
@@ -125,6 +131,7 @@ Generate the full invoice and accounting entries.`;
           draft: false,
           calculator_mode: 'initial',
           currency_code: 'EUR',
+          ...(invoiceDocType && { documenttype: invoiceDocType.id }),
           items: result.data.lineItems.map((item: any) => ({
             title: item.description,
             quantity: String(item.quantity),

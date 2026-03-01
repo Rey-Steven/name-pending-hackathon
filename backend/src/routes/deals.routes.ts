@@ -247,6 +247,7 @@ router.post('/:id/approve-offer', async (req: Request, res: Response) => {
       geographic_focus: companyProfile.geographic_focus,
       agentContexts: JSON.parse(companyProfile.agent_context_json || '{}'),
       communication_language: companyProfile.communication_language,
+      terms_of_service: companyProfile.terms_of_service || undefined,
     };
 
     const emailAgent = new EmailAgent(companyProfileCtx);

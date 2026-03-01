@@ -20,6 +20,7 @@ export interface CompanyProfileResult {
   geographic_focus: string;
   agentContexts: AgentCompanyContexts;
   help_center_content: HelpCenterContent;
+  terms_of_service: string;
 }
 
 interface ProfilerInput {
@@ -65,7 +66,8 @@ ALWAYS respond with valid JSON in this exact format:
       { "question": "What services do you offer?", "answer": "..." },
       { "question": "How do I get started?", "answer": "..." }
     ]
-  }
+  },
+  "terms_of_service": "Standard B2B service agreement template in plain text (no markdown). Must include these numbered sections: 1. Subject Matter and Scope of Services, 2. Payment Terms and Pricing, 3. Delivery and Acceptance, 4. Intellectual Property, 5. Confidentiality, 6. Data Protection (GDPR), 7. Limitation of Liability, 8. Term and Termination, 9. Governing Law and Jurisdiction (Greece, Greek courts). Make it specific to this company's industry and services. Write in professional legal language suitable for Greek B2B contracts. Use placeholders [CLIENT_NAME], [CLIENT_AFM], [DATE], [PRODUCT], [AMOUNT] where deal-specific values will be inserted. Keep it concise (400-600 words)."
 }`;
 
 export async function profileCompany(input: ProfilerInput): Promise<CompanyProfileResult> {
