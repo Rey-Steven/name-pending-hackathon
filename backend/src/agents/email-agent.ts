@@ -1,6 +1,8 @@
 import { BaseAgent } from './base-agent';
 import { EmailResult, AgentResponse, CompanyProfileContext } from '../types';
 import { LeadDB, EmailDB, DealDB } from '../database/db';
+import { TaskQueue } from '../services/task-queue';
+import { TaskLogger } from '../services/task-logger';
 import {
   sendRealEmail,
   fetchInbox,
@@ -272,63 +274,103 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
     const lead = await LeadDB.findById(leadId);
     if (!lead) throw new Error(`Lead ${leadId} not found`);
 
-    const result = await this.execute<EmailResult>(
-      { lead, emailType, ...context },
-      { dealId: context.dealId, leadId }
-    );
-
-    const recipientEmail = lead.contact_email || result.data.recipientEmail;
-    const recipientName = result.data.recipientName || lead.contact_name;
-
-    // Use thread subject + headers when threading with a previous email
-    let subject = result.data.subject;
-    let inReplyTo: string | undefined;
-    let references: string | undefined;
-    if (context.threadWith?.messageId) {
-      const baseSubject = context.threadWith.subject.replace(/^(Re|RE|Απ|ΑΠ|Fwd|FWD|Πρ):\s*/g, '').trim();
-      subject = `Re: ${baseSubject}`;
-      inReplyTo = context.threadWith.messageId;
-      references = context.threadWith.messageId;
+    // Auto-create task if none was provided (e.g. lifecycle poller calls)
+    const ownTask = !context.taskId;
+    if (ownTask) {
+      context.taskId = await TaskQueue.createAndTrack({
+        sourceAgent: 'email',
+        targetAgent: 'email',
+        taskType: 'send_email',
+        title: `Send ${emailType}: ${lead.company_name}`,
+        inputData: { leadId, emailType },
+        dealId: context.dealId,
+        leadId,
+        companyId: this.companyProfile?.id,
+      });
     }
 
-    const sendResult = await sendRealEmail({
-      to: recipientEmail,
-      subject,
-      body: result.data.body,
-      inReplyTo,
-      references,
-    });
+    try {
+      const result = await this.execute<EmailResult>(
+        { lead, emailType, ...context },
+        { dealId: context.dealId, leadId, taskId: context.taskId }
+      );
 
-    await EmailDB.create({
-      company_id: this.companyProfile?.id,
-      task_id: context.taskId,
-      deal_id: context.dealId,
-      invoice_id: context.invoiceId,
-      recipient_email: recipientEmail,
-      recipient_name: recipientName,
-      subject,
-      body: result.data.body,
-      email_type: emailType,
-      direction: 'outbound',
-      message_id: sendResult.messageId,
-      status: sendResult.sent ? 'sent' : 'failed',
-      error_message: sendResult.error,
-    });
+      const recipientEmail = lead.contact_email || result.data.recipientEmail;
+      const recipientName = result.data.recipientName || lead.contact_name;
 
-    console.log(`\n  📧 EMAIL ${sendResult.sent ? '✅ DELIVERED' : '⚠️ LOGGED'}:`);
-    console.log(`     To: ${recipientEmail}`);
-    console.log(`     Subject: ${result.data.subject}`);
-    console.log(`     Body preview: ${result.data.body.slice(0, 100)}...`);
-    if (sendResult.messageId) {
-      console.log(`     Message ID: ${sendResult.messageId}`);
+      // Use thread subject + headers when threading with a previous email
+      let subject = result.data.subject;
+      let inReplyTo: string | undefined;
+      let references: string | undefined;
+      if (context.threadWith?.messageId) {
+        const baseSubject = context.threadWith.subject.replace(/^(Re|RE|Απ|ΑΠ|Fwd|FWD|Πρ):\s*/g, '').trim();
+        subject = `Re: ${baseSubject}`;
+        inReplyTo = context.threadWith.messageId;
+        references = context.threadWith.messageId;
+      }
+
+      const sendResult = await sendRealEmail({
+        to: recipientEmail,
+        subject,
+        body: result.data.body,
+        inReplyTo,
+        references,
+      });
+
+      await EmailDB.create({
+        company_id: this.companyProfile?.id,
+        task_id: context.taskId,
+        deal_id: context.dealId,
+        invoice_id: context.invoiceId,
+        recipient_email: recipientEmail,
+        recipient_name: recipientName,
+        subject,
+        body: result.data.body,
+        email_type: emailType,
+        direction: 'outbound',
+        message_id: sendResult.messageId,
+        status: sendResult.sent ? 'sent' : 'failed',
+        error_message: sendResult.error,
+      });
+
+      console.log(`\n  📧 EMAIL ${sendResult.sent ? '✅ DELIVERED' : '⚠️ LOGGED'}:`);
+      console.log(`     To: ${recipientEmail}`);
+      console.log(`     Subject: ${result.data.subject}`);
+      console.log(`     Body preview: ${result.data.body.slice(0, 100)}...`);
+      if (sendResult.messageId) {
+        console.log(`     Message ID: ${sendResult.messageId}`);
+      }
+
+      if (ownTask) {
+        await TaskQueue.complete(context.taskId!, { sent: sendResult.sent, emailType });
+      }
+
+      return result;
+    } catch (error: any) {
+      if (ownTask && context.taskId) {
+        await TaskQueue.fail(context.taskId, error.message);
+      }
+      throw error;
     }
-
-    return result;
   }
 
   // ─── Direct delivery (no AI, content provided by another agent) ───
 
   async deliver(params: DirectDeliveryParams): Promise<{ sent: boolean; messageId?: string; error?: string }> {
+    // Auto-create task if none was provided
+    const ownTask = !params.taskId;
+    if (ownTask) {
+      params.taskId = await TaskQueue.createAndTrack({
+        sourceAgent: 'email',
+        targetAgent: 'email',
+        taskType: 'deliver_email',
+        title: `Deliver ${params.emailType}: ${params.recipientName || params.to}`,
+        inputData: { emailType: params.emailType, to: params.to },
+        dealId: params.dealId,
+        companyId: this.companyProfile?.id,
+      });
+    }
+
     const sendResult = await sendRealEmail({
       to: params.to,
       subject: params.subject,
@@ -355,6 +397,24 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
     });
 
     console.log(`\n  📧 DELIVER ${sendResult.sent ? '✅ SENT' : '⚠️ LOGGED'}: To: ${params.to} | Subject: ${params.subject}`);
+
+    // Record delivery result as a log entry (no AI call = no SSE events to capture)
+    if (params.taskId && TaskLogger.has(params.taskId)) {
+      TaskLogger.append(params.taskId, {
+        type: sendResult.sent ? 'info' : 'warning',
+        agent: 'email',
+        message: sendResult.sent ? `Email delivered to ${params.to}` : `Email delivery failed: ${sendResult.error}`,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (ownTask && params.taskId) {
+      if (sendResult.sent) {
+        await TaskQueue.complete(params.taskId, { sent: true, emailType: params.emailType });
+      } else {
+        await TaskQueue.fail(params.taskId, sendResult.error || 'Email delivery failed');
+      }
+    }
 
     return sendResult;
   }

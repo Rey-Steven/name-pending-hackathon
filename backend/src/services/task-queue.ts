@@ -1,5 +1,6 @@
 import { TaskDB, Task } from '../database/db';
 import { AgentType } from '../types';
+import { TaskLogger } from './task-logger';
 
 export class TaskQueue {
   static async createTask(params: {
@@ -27,7 +28,27 @@ export class TaskQueue {
       priority: params.priority || 0,
     });
 
+    TaskLogger.init(taskId);
+
     console.log(`  📝 Task created: [${params.sourceAgent} → ${params.targetAgent}] ${params.title} (ID: ${taskId})`);
+    return taskId;
+  }
+
+  /** Create a task and immediately mark it as processing (for self-contained operations). */
+  static async createAndTrack(params: {
+    sourceAgent: AgentType;
+    targetAgent: AgentType;
+    taskType: string;
+    title: string;
+    description?: string;
+    inputData: any;
+    dealId?: string;
+    leadId?: string;
+    priority?: number;
+    companyId?: string;
+  }): Promise<string> {
+    const taskId = await TaskQueue.createTask(params);
+    await TaskQueue.startProcessing(taskId);
     return taskId;
   }
 
@@ -36,16 +57,20 @@ export class TaskQueue {
   }
 
   static async complete(taskId: string, outputData?: any): Promise<void> {
+    const logs = TaskLogger.flush(taskId);
     await TaskDB.update(taskId, {
       status: 'completed',
       output_data: outputData ? JSON.stringify(outputData) : undefined,
+      logs: logs.length > 0 ? JSON.stringify(logs) : undefined,
     });
   }
 
   static async fail(taskId: string, error: string): Promise<void> {
+    const logs = TaskLogger.flush(taskId);
     await TaskDB.update(taskId, {
       status: 'failed',
       error_message: error,
+      logs: logs.length > 0 ? JSON.stringify(logs) : undefined,
     });
   }
 

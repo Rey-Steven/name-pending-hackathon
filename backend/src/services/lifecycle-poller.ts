@@ -2,6 +2,8 @@ import { DealDB, LeadDB, EmailDB, AppSettingsDB, MarketResearchDB, SocialContent
 import { CompanyProfileDB } from '../database/db';
 import { EmailAgent } from '../agents/email-agent';
 import { CompanyProfileContext } from '../types';
+import { TaskQueue } from './task-queue';
+import { TaskLogger } from './task-logger';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -137,6 +139,24 @@ export async function pollLostDeals(): Promise<void> {
             continue;
           }
 
+          const taskId = await TaskQueue.createAndTrack({
+            sourceAgent: 'sales',
+            targetAgent: 'marketing',
+            taskType: 'reopen_deal',
+            title: `Reopen lost deal: ${lead.company_name}`,
+            inputData: { dealId: deal.id, originalLeadId: deal.lead_id },
+            dealId: deal.id,
+            leadId: deal.lead_id,
+            companyId: company.id,
+          });
+
+          TaskLogger.append(taskId, {
+            type: 'info',
+            agent: 'sales',
+            message: `Reopening lost deal #${deal.id} (${lead.company_name})`,
+            timestamp: new Date().toISOString(),
+          });
+
           // Mark old deal as reopened so we don't process it again
           await DealDB.update(deal.id!, { status: 'reopened' });
 
@@ -157,6 +177,8 @@ export async function pollLostDeals(): Promise<void> {
           engine.startWorkflow(newLeadId).catch((err: Error) => {
             console.error(`  ❌ Workflow error for reopened lead #${newLeadId}:`, err.message);
           });
+
+          await TaskQueue.complete(taskId, { newLeadId });
 
           console.log(`  ✅ Deal #${deal.id} reopened → new lead #${newLeadId} created`);
         } catch (err: any) {

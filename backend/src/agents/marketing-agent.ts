@@ -85,27 +85,45 @@ Provide your analysis and lead score.`;
     const lead = await LeadDB.findById(leadId);
     if (!lead) throw new Error(`Lead ${leadId} not found`);
 
-    const result = await this.execute<MarketingResult>(lead, { leadId });
-
-    await LeadDB.update(leadId, {
-      industry: result.data.industry,
-      company_size: result.data.companySize,
-      annual_revenue: result.data.annualRevenue,
-      lead_score: result.data.leadScore,
-      status: 'qualified',
-    });
-
-    await TaskQueue.createTask({
+    const enrichTaskId = await TaskQueue.createAndTrack({
       sourceAgent: 'marketing',
-      targetAgent: 'sales',
-      taskType: 'qualify_lead',
-      title: `Qualify lead: ${lead.company_name}`,
-      description: `Lead score: ${result.data.leadScore} - ${result.decision}`,
-      inputData: { leadId, marketingResult: result.data },
+      targetAgent: 'marketing',
+      taskType: 'lead_enrichment',
+      title: `Enrich lead: ${lead.company_name}`,
+      inputData: { leadId },
       leadId,
+      companyId: lead.company_id,
     });
 
-    return result;
+    try {
+      const result = await this.execute<MarketingResult>(lead, { leadId, taskId: enrichTaskId });
+
+      await LeadDB.update(leadId, {
+        industry: result.data.industry,
+        company_size: result.data.companySize,
+        annual_revenue: result.data.annualRevenue,
+        lead_score: result.data.leadScore,
+        status: 'qualified',
+      });
+
+      await TaskQueue.complete(enrichTaskId, result.data);
+
+      await TaskQueue.createTask({
+        sourceAgent: 'marketing',
+        targetAgent: 'sales',
+        taskType: 'qualify_lead',
+        title: `Qualify lead: ${lead.company_name}`,
+        description: `Lead score: ${result.data.leadScore} - ${result.decision}`,
+        inputData: { leadId, marketingResult: result.data },
+        leadId,
+        companyId: lead.company_id,
+      });
+
+      return result;
+    } catch (error: any) {
+      await TaskQueue.fail(enrichTaskId, error.message);
+      throw error;
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -198,9 +216,19 @@ Provide your analysis as a structured market research report.`;
     console.log(`\n📊 MARKET RESEARCH started (ID: ${researchId}, triggered: ${triggeredBy})`);
     AuditLog.log('marketing', 'research_started', 'market_research', researchId, { triggeredBy, queries: searchQueries });
 
+    const taskId = await TaskQueue.createAndTrack({
+      sourceAgent: 'marketing',
+      targetAgent: 'marketing',
+      taskType: 'market_research',
+      title: `Market research (${triggeredBy})`,
+      inputData: { triggeredBy, queries: searchQueries },
+      companyId,
+    });
+
     broadcastEvent({
       type: 'agent_started',
       agent: 'marketing',
+      taskId,
       message: `Market research started (${triggeredBy})`,
       timestamp: new Date().toISOString(),
     });
@@ -210,7 +238,7 @@ Provide your analysis as a structured market research report.`;
 
       const result = await this.execute<MarketResearchResult>(
         { searchResults, companyContext },
-        {}
+        { taskId }
       );
 
       await MarketResearchDB.update(researchId, {
@@ -232,6 +260,8 @@ Provide your analysis as a structured market research report.`;
         competitorCount: result.data.competitorInsights.length,
       });
 
+      await TaskQueue.complete(taskId, { researchId });
+
       return researchId;
     } catch (err: any) {
       await MarketResearchDB.update(researchId, {
@@ -239,6 +269,7 @@ Provide your analysis as a structured market research report.`;
         error_message: err.message,
       });
       AuditLog.log('marketing', 'research_failed', 'market_research', researchId, { error: err.message });
+      await TaskQueue.fail(taskId, err.message);
       throw err;
     }
   }
@@ -325,69 +356,86 @@ Generate one Instagram post draft and one LinkedIn post draft.`;
     console.log(`\n✍️  CONTENT CREATION started (research: ${research.id}, triggered: ${triggeredBy})`);
     AuditLog.log('marketing', 'content_started', 'social_content', undefined, { researchId: research.id, triggeredBy });
 
+    const taskId = await TaskQueue.createAndTrack({
+      sourceAgent: 'marketing',
+      targetAgent: 'marketing',
+      taskType: 'content_creation',
+      title: `Social content creation (${triggeredBy})`,
+      inputData: { researchId: research.id, triggeredBy },
+      companyId,
+    });
+
     broadcastEvent({
       type: 'agent_started',
       agent: 'marketing',
+      taskId,
       message: `Content creation started (${triggeredBy})`,
       timestamp: new Date().toISOString(),
     });
 
-    const trends = research.trends_json ? JSON.parse(research.trends_json) : [];
-    const opportunities = research.opportunities ? JSON.parse(research.opportunities) : [];
-    const researchSummary = research.summary || 'No summary available';
+    try {
+      const trends = research.trends_json ? JSON.parse(research.trends_json) : [];
+      const opportunities = research.opportunities ? JSON.parse(research.opportunities) : [];
+      const researchSummary = research.summary || 'No summary available';
 
-    const result = await this.execute<SocialContentResult>(
-      {
-        researchSummary,
-        researchId: research.id!,
-        trends,
-        opportunities,
-      },
-      {}
-    );
+      const result = await this.execute<SocialContentResult>(
+        {
+          researchSummary,
+          researchId: research.id!,
+          trends,
+          opportunities,
+        },
+        { taskId }
+      );
 
-    const contentIds: string[] = [];
+      const contentIds: string[] = [];
 
-    const igId = await SocialContentDB.create({
-      company_id: companyId,
-      research_id: research.id,
-      platform: 'instagram',
-      post_text: result.data.instagram.postText,
-      hashtags: JSON.stringify(result.data.instagram.hashtags),
-      image_description: result.data.instagram.imageDescription,
-      best_posting_time: result.data.instagram.bestPostingTime,
-      tone: result.data.instagram.tone,
-      content_theme: result.data.contentTheme,
-      ai_reasoning: JSON.stringify(result.reasoning),
-      status: 'draft',
-      triggered_by: triggeredBy,
-    });
-    contentIds.push(igId);
+      const igId = await SocialContentDB.create({
+        company_id: companyId,
+        research_id: research.id,
+        platform: 'instagram',
+        post_text: result.data.instagram.postText,
+        hashtags: JSON.stringify(result.data.instagram.hashtags),
+        image_description: result.data.instagram.imageDescription,
+        best_posting_time: result.data.instagram.bestPostingTime,
+        tone: result.data.instagram.tone,
+        content_theme: result.data.contentTheme,
+        ai_reasoning: JSON.stringify(result.reasoning),
+        status: 'draft',
+        triggered_by: triggeredBy,
+      });
+      contentIds.push(igId);
 
-    const liId = await SocialContentDB.create({
-      company_id: companyId,
-      research_id: research.id,
-      platform: 'linkedin',
-      post_text: result.data.linkedin.postText,
-      hashtags: JSON.stringify(result.data.linkedin.hashtags),
-      image_description: result.data.linkedin.imageDescription,
-      best_posting_time: result.data.linkedin.bestPostingTime,
-      tone: result.data.linkedin.tone,
-      content_theme: result.data.contentTheme,
-      ai_reasoning: JSON.stringify(result.reasoning),
-      status: 'draft',
-      triggered_by: triggeredBy,
-    });
-    contentIds.push(liId);
+      const liId = await SocialContentDB.create({
+        company_id: companyId,
+        research_id: research.id,
+        platform: 'linkedin',
+        post_text: result.data.linkedin.postText,
+        hashtags: JSON.stringify(result.data.linkedin.hashtags),
+        image_description: result.data.linkedin.imageDescription,
+        best_posting_time: result.data.linkedin.bestPostingTime,
+        tone: result.data.linkedin.tone,
+        content_theme: result.data.contentTheme,
+        ai_reasoning: JSON.stringify(result.reasoning),
+        status: 'draft',
+        triggered_by: triggeredBy,
+      });
+      contentIds.push(liId);
 
-    console.log(`  ✅ Content created: Instagram (${igId}), LinkedIn (${liId})`);
-    AuditLog.log('marketing', 'content_completed', 'social_content', undefined, {
-      researchId: research.id,
-      instagramId: igId,
-      linkedinId: liId,
-      theme: result.data.contentTheme,
-    });
+      console.log(`  ✅ Content created: Instagram (${igId}), LinkedIn (${liId})`);
+      AuditLog.log('marketing', 'content_completed', 'social_content', undefined, {
+        researchId: research.id,
+        instagramId: igId,
+        linkedinId: liId,
+        theme: result.data.contentTheme,
+      });
 
-    return contentIds;
+      await TaskQueue.complete(taskId, { contentIds });
+
+      return contentIds;
+    } catch (error: any) {
+      await TaskQueue.fail(taskId, error.message);
+      throw error;
+    }
   }
 }
