@@ -5,6 +5,7 @@ import { AccountingAgent } from '../agents/accounting-agent';
 import { EmailAgent } from '../agents/email-agent';
 import { TaskQueue } from './task-queue';
 import { DealDB, LeadDB, EmailDB, AuditLog, CompanyProfileDB, AppSettingsDB, PendingOfferDB, Lead } from '../database/db';
+import { getElorusService } from './elorus-service';
 import { generateOfferPDF } from './pdf-generator';
 import { broadcastEvent } from '../routes/dashboard.routes';
 import { CompanyProfileContext } from '../types';
@@ -357,6 +358,51 @@ export class WorkflowEngine {
 
     // ─── ACCEPTED: Run Legal → Accounting → Invoice pipeline ─────
     if (action === 'accepted') {
+      // If the offer was issued via Elorus, email acceptance is not valid —
+      // the customer must accept through the Elorus permalink.
+      if (deal.elorus_estimate_id) {
+        try {
+          const elorusService = await getElorusService(deal.company_id!);
+          if (elorusService) {
+            const elorusEstimate = await elorusService.getEstimate(deal.elorus_estimate_id);
+            if (elorusEstimate.status !== 'accepted') {
+              // Not accepted on Elorus yet — redirect the customer
+              const permalink = elorusEstimate.permalink || (deal as any).elorus_estimate_permalink;
+              const redirectBody = permalink
+                ? `Αγαπητέ/ή ${lead.contact_name},\n\nΕυχαριστούμε για την ανταπόκρισή σας!\n\nΓια να ισχύει επίσημα η αποδοχή της προσφοράς, παρακαλούμε επιβεβαιώστε μέσω του παρακάτω συνδέσμου:\n${permalink}\n\nΜόλις επιβεβαιώσετε, θα επεξεργαστούμε άμεσα την παραγγελία σας.\n\nΜε εκτίμηση`
+                : `Αγαπητέ/ή ${lead.contact_name},\n\nΕυχαριστούμε για την ανταπόκρισή σας!\n\nΓια να ισχύει επίσημα η αποδοχή, παρακαλούμε αποδεχτείτε την προσφορά μέσω του συνδέσμου αποδοχής που σας εστάλη με το email της προσφοράς.\n\nΜε εκτίμηση`;
+
+              await emailAgent.deliver({
+                to: lead.contact_email!,
+                subject: reply.subject,
+                body: redirectBody,
+                dealId,
+                recipientName: lead.contact_name,
+                emailType: 'follow_up',
+                inReplyTo: reply.messageId,
+                references: reply.references ? `${reply.references} ${reply.messageId}` : reply.messageId,
+              });
+
+              console.log(`\n  🔗 Customer replied with acceptance — redirected to Elorus link (status: ${elorusEstimate.status})`);
+
+              broadcastEvent({
+                type: 'workflow_completed', agent: 'sales', dealId, leadId: deal.lead_id,
+                message: 'Customer accepted by email — redirected to Elorus link for official confirmation',
+                timestamp: new Date().toISOString(),
+              });
+
+              return { status: 'offer_sent', dealId, action: 'redirect_to_elorus', round: roundNumber, duration,
+                message: 'Customer must accept via Elorus link — redirect email sent' };
+            }
+            // Estimate already accepted on Elorus — proceed with closing
+            console.log('\n  ✅ Elorus estimate already accepted — proceeding with closure');
+          }
+        } catch (elorusError: any) {
+          // If we can't check Elorus status, proceed with close (don't block deal)
+          console.warn(`  ⚠️ Could not verify Elorus status: ${elorusError.message} — proceeding with close`);
+        }
+      }
+
       console.log('\n  ✅ OFFER ACCEPTED — Running Legal → Accounting → Invoice');
 
       await DealDB.update(dealId, { status: 'closed_won', negotiation_round: roundNumber });

@@ -140,6 +140,7 @@ router.post('/:id/approve-offer', async (req: Request, res: Response) => {
       offer_quantity,
       offer_unit_price,
       reply_body,
+      elorus_product_id,
     } = req.body;
 
     const pending = await PendingOfferDB.findByDeal(dealId);
@@ -212,7 +213,8 @@ router.post('/:id/approve-offer', async (req: Request, res: Response) => {
         currency_code: 'EUR',
         ...(estimateDocType && { documenttype: estimateDocType.id }),
         items: [{
-          title: productName,
+          // Use Elorus product reference when provided (ensures only catalogued products)
+          ...(elorus_product_id ? { product: elorus_product_id } : { title: productName }),
           quantity: String(qty),
           unit_value: String(unitPrice),
           taxes: fpaTax ? [{ tax: fpaTax.id }] : [],
@@ -221,15 +223,19 @@ router.post('/:id/approve-offer', async (req: Request, res: Response) => {
 
       const estimate = await elorusService.createEstimate(estimatePayload);
 
-      // Issue the estimate (mark as non-draft)
-      await elorusService.updateEstimate(estimate.id, { draft: false });
+      // Issue the estimate (mark as non-draft); response contains the permalink
+      const issuedEstimate = await elorusService.updateEstimate(estimate.id, { draft: false });
+      const estimatePermalink = issuedEstimate.permalink;
 
       // Download PDF from Elorus
       pdfBuffer = await elorusService.getEstimatePDF(estimate.id);
 
-      // Store Elorus estimate ID on the deal
-      await DealDB.update(dealId, { elorus_estimate_id: estimate.id } as any);
-      console.log(`  📄 Elorus estimate created: ${estimate.id}`);
+      // Store Elorus estimate ID + permalink on the deal
+      await DealDB.update(dealId, {
+        elorus_estimate_id: estimate.id,
+        ...(estimatePermalink && { elorus_estimate_permalink: estimatePermalink }),
+      } as any);
+      console.log(`  📄 Elorus estimate created: ${estimate.id}${estimatePermalink ? ` — ${estimatePermalink}` : ''}`);
     } else {
       // Local PDF fallback
       pdfBuffer = await generateOfferPDF({ deal: updatedDeal, lead, companyProfile });
@@ -250,11 +256,18 @@ router.post('/:id/approve-offer', async (req: Request, res: Response) => {
       terms_of_service: companyProfile.terms_of_service || undefined,
     };
 
+    // If the offer was issued via Elorus, append the acceptance link to the email
+    const updatedDealForLink = await DealDB.findById(dealId);
+    const estimatePermalink = (updatedDealForLink as any)?.elorus_estimate_permalink;
+    const finalEmailBody = estimatePermalink
+      ? `${emailBody}\n\n---\nΓια να αποδεχτείτε επίσημα την προσφορά, παρακαλώ χρησιμοποιήστε τον παρακάτω σύνδεσμο:\n${estimatePermalink}`
+      : emailBody;
+
     const emailAgent = new EmailAgent(companyProfileCtx);
     await emailAgent.deliver({
       to: lead.contact_email,
       subject: pending.reply_subject,
-      body: emailBody,
+      body: finalEmailBody,
       dealId,
       recipientName: lead.contact_name,
       emailType: 'proposal',

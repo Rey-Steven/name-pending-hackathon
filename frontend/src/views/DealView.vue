@@ -3,14 +3,15 @@
     <div class="flex items-center justify-between mb-8">
       <h1 class="text-3xl font-bold text-gray-900">Deal #{{ deal.id }}</h1>
       <div class="flex items-center space-x-3">
+        <!-- View Offer: navigates to Elorus offers tab if linked, otherwise downloads local PDF -->
         <button
           v-if="deal.subtotal > 0"
-          @click="downloadPDF"
+          @click="viewOffer"
           :disabled="downloadingPDF"
           class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center space-x-2 text-sm font-medium"
         >
           <span v-if="downloadingPDF">Generating...</span>
-          <span v-else>Download Offer PDF</span>
+          <span v-else>View Offer</span>
         </button>
         <router-link :to="`/company/${$route.params.companyId}/dashboard`" class="text-gray-500 hover:text-gray-700">Back to Dashboard</router-link>
       </div>
@@ -165,10 +166,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { dealsApi } from '../api/client'
 
 const route = useRoute()
+const router = useRouter()
 const deal = ref<any>(null)
 
 const leadProfile = computed(() => {
@@ -188,8 +190,14 @@ function formatCurrency(amount: number) {
   return new Intl.NumberFormat('el-GR', { style: 'currency', currency: 'EUR' }).format(amount || 0)
 }
 
-async function downloadPDF() {
+async function viewOffer() {
   if (!deal.value?.id) return
+  // If the offer was issued via Elorus, navigate to the Elorus offers tab
+  if (deal.value.elorus_estimate_id) {
+    router.push(`/company/${route.params.companyId}/elorus-offers`)
+    return
+  }
+  // Fallback: download local PDF
   downloadingPDF.value = true
   try {
     const response = await dealsApi.downloadPDF(deal.value.id)
@@ -204,7 +212,6 @@ async function downloadPDF() {
     window.URL.revokeObjectURL(url)
   } catch (err) {
     console.error('PDF download failed:', err)
-    // Axios interceptor shows the error toast
   } finally {
     downloadingPDF.value = false
   }

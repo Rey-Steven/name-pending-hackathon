@@ -83,6 +83,7 @@ export interface Deal {
   satisfaction_sent?: boolean;
   status?: string;
   elorus_estimate_id?: string;
+  elorus_estimate_permalink?: string;
   elorus_invoice_id?: string;
   created_at?: string;
   updated_at?: string;

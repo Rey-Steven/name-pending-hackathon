@@ -9,9 +9,14 @@
             <p class="text-sm text-amber-700">Review, edit and approve before sending to leads</p>
           </div>
         </div>
-        <span class="bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1 rounded-full">
-          {{ offers.length }} pending
-        </span>
+        <div class="flex items-center gap-3">
+          <span v-if="elorusLinked" class="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full font-medium">
+            <span>⚡</span> Elorus linked — products from catalog
+          </span>
+          <span class="bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1 rounded-full">
+            {{ offers.length }} pending
+          </span>
+        </div>
       </div>
 
       <div class="divide-y divide-gray-100">
@@ -34,12 +39,28 @@
 
           <!-- Editable offer fields -->
           <div class="grid grid-cols-3 gap-4 mb-4">
+            <!-- Product: dropdown when Elorus linked, text input otherwise -->
             <div>
               <label class="block text-xs font-medium text-gray-500 mb-1">Product / Service</label>
+              <select
+                v-if="elorusLinked && elorusProducts.length > 0"
+                v-model="edits[offer.id!].elorus_product_id"
+                @change="onProductSelect(offer.id!)"
+                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+              >
+                <option value="">— select product —</option>
+                <option v-for="p in elorusProducts" :key="p.id" :value="p.id">
+                  {{ p.title }}{{ p.sale_value ? ` (€${p.sale_value})` : '' }}
+                </option>
+              </select>
               <input
+                v-else
                 v-model="edits[offer.id!].offer_product_name"
                 class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
+              <p v-if="elorusLinked && edits[offer.id!].elorus_product_id" class="mt-0.5 text-xs text-gray-400">
+                {{ edits[offer.id!].offer_product_name }}
+              </p>
             </div>
             <div>
               <label class="block text-xs font-medium text-gray-500 mb-1">Quantity</label>
@@ -65,15 +86,15 @@
           <div class="grid grid-cols-3 gap-4 mb-4 bg-gray-50 rounded-lg px-4 py-3 text-sm">
             <div>
               <span class="text-gray-500">Subtotal</span>
-              <p class="font-semibold">€{{ fmt(computed[offer.id!]?.subtotal) }}</p>
+              <p class="font-semibold">€{{ fmt(computedPricing[offer.id!]?.subtotal) }}</p>
             </div>
             <div>
               <span class="text-gray-500">FPA 24%</span>
-              <p class="font-semibold">€{{ fmt(computed[offer.id!]?.fpa) }}</p>
+              <p class="font-semibold">€{{ fmt(computedPricing[offer.id!]?.fpa) }}</p>
             </div>
             <div>
               <span class="text-gray-500">Total</span>
-              <p class="text-lg font-bold text-gray-900">€{{ fmt(computed[offer.id!]?.total) }}</p>
+              <p class="text-lg font-bold text-gray-900">€{{ fmt(computedPricing[offer.id!]?.total) }}</p>
             </div>
           </div>
 
@@ -85,13 +106,16 @@
               rows="5"
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
+            <p v-if="elorusLinked" class="mt-1 text-xs text-gray-400">
+              The Elorus acceptance link will be appended automatically.
+            </p>
           </div>
 
           <!-- Action buttons -->
           <div class="flex items-center gap-3">
             <button
               @click="approve(offer)"
-              :disabled="busy[offer.id!]"
+              :disabled="busy[offer.id!] || (elorusLinked && elorusProducts.length > 0 && !edits[offer.id!].elorus_product_id)"
               class="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
             >
               {{ busy[offer.id!] === 'approving' ? 'Sending…' : '✓ Approve & Send' }}
@@ -113,7 +137,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { dealsApi } from '../api/client'
+import { dealsApi, elorusApi } from '../api/client'
 
 interface OfferEdit {
   offer_product_name: string
@@ -121,9 +145,10 @@ interface OfferEdit {
   offer_unit_price: number
   reply_body: string
   fpa_rate: number
+  elorus_product_id: string
 }
 
-interface Computed {
+interface ComputedPricing {
   subtotal: number
   fpa: number
   total: number
@@ -131,9 +156,12 @@ interface Computed {
 
 const offers = ref<any[]>([])
 const edits = reactive<Record<string, OfferEdit>>({})
-const computed = reactive<Record<string, Computed>>({})
+const computedPricing = reactive<Record<string, ComputedPricing>>({})
 const busy = reactive<Record<string, string | null>>({})
 const errors = reactive<Record<string, string>>({})
+
+const elorusLinked = ref(false)
+const elorusProducts = ref<any[]>([])
 
 function actionLabel(action: string) {
   if (action === 'counter') return 'Counter-offer'
@@ -151,7 +179,19 @@ function recalc(id: string) {
   const subtotal = (e.offer_quantity || 0) * (e.offer_unit_price || 0)
   const fpa = Math.round(subtotal * e.fpa_rate * 100) / 100
   const total = Math.round((subtotal + fpa) * 100) / 100
-  computed[id] = { subtotal, fpa, total }
+  computedPricing[id] = { subtotal, fpa, total }
+}
+
+function onProductSelect(id: string) {
+  const e = edits[id]
+  const product = elorusProducts.value.find(p => p.id === e.elorus_product_id)
+  if (!product) return
+  e.offer_product_name = product.title
+  // Pre-fill unit price from Elorus catalog if available
+  if (product.sale_value) {
+    e.offer_unit_price = parseFloat(product.sale_value)
+    recalc(id)
+  }
 }
 
 async function load() {
@@ -164,6 +204,7 @@ async function load() {
       offer_unit_price: o.offer_unit_price,
       reply_body: o.reply_body,
       fpa_rate: o.offer_fpa_rate,
+      elorus_product_id: '',
     }
     recalc(o.id)
     busy[o.id] = null
@@ -175,11 +216,13 @@ async function approve(offer: any) {
   busy[offer.id] = 'approving'
   errors[offer.id] = ''
   try {
+    const edit = edits[offer.id]
     await dealsApi.approveOffer(offer.deal_id, {
-      offer_product_name: edits[offer.id].offer_product_name,
-      offer_quantity: edits[offer.id].offer_quantity,
-      offer_unit_price: edits[offer.id].offer_unit_price,
-      reply_body: edits[offer.id].reply_body,
+      offer_product_name: edit.offer_product_name,
+      offer_quantity: edit.offer_quantity,
+      offer_unit_price: edit.offer_unit_price,
+      reply_body: edit.reply_body,
+      ...(edit.elorus_product_id && { elorus_product_id: edit.elorus_product_id }),
     })
     await load()
   } catch (err: any) {
@@ -205,5 +248,18 @@ async function reject(offer: any) {
 // Expose reload so Dashboard can call it on SSE events
 defineExpose({ load })
 
-onMounted(load)
+onMounted(async () => {
+  await load()
+  // Check if Elorus is linked and load products
+  try {
+    const statusRes = await elorusApi.status()
+    if (statusRes.data?.configured) {
+      elorusLinked.value = true
+      const productsRes = await elorusApi.listProducts({ active: 'true', sales: 'true', page_size: 200 })
+      elorusProducts.value = productsRes.data?.results || []
+    }
+  } catch {
+    // Elorus not configured — no-op
+  }
+})
 </script>
