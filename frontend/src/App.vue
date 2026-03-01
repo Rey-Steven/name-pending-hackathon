@@ -295,6 +295,7 @@ const navItems: NavItem[] = [
     { label: 'Invoices', subpath: 'invoices' },
   ]},
   { label: 'Legal', children: [
+    { label: 'Reviews', subpath: 'legal/reviews' },
     { label: 'Contracts', subpath: 'legal/contracts' },
   ]},
   { label: 'Operations', children: [

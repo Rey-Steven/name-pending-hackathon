@@ -19,6 +19,7 @@ import researchRoutes from './routes/research.routes';
 import contentRoutes from './routes/content.routes';
 import gemiRoutes from './routes/gemi.routes';
 import elorusRoutes from './routes/elorus.routes';
+import legalRoutes from './routes/legal.routes';
 import { pollGemiScraper } from './services/gemi-scraper';
 
 const app = express();
@@ -57,6 +58,7 @@ app.use('/api/research', researchRoutes);
 app.use('/api/content', contentRoutes);
 app.use('/api/gemi', gemiRoutes);
 app.use('/api/elorus', elorusRoutes);
+app.use('/api/legal', legalRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

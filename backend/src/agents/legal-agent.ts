@@ -89,21 +89,23 @@ IMPORTANT:
     const lead = await LeadDB.findById(leadId);
     if (!lead) throw new Error(`Lead ${leadId} not found`);
 
-    const taskId = await TaskQueue.createAndTrack({
+    // ─── Task 1: Legal Review (AI compliance check) ───────────────
+    const reviewTaskId = await TaskQueue.createAndTrack({
       sourceAgent: 'legal',
       targetAgent: 'legal',
       taskType: 'legal_review',
-      title: `Legal review: deal #${dealId}`,
-      inputData: { dealId },
+      title: `Legal review: ${lead.company_name}`,
+      inputData: { dealId, leadId },
       dealId,
       leadId,
       companyId: this.companyProfile?.id,
     });
 
+    let result: LegalResult;
     try {
-      const result = await this.execute<LegalResult>(
+      result = await this.execute<LegalResult>(
         { dealId, lead, salesResult },
-        { dealId, leadId, taskId }
+        { dealId, leadId, taskId: reviewTaskId }
       );
 
       await LegalValidationDB.create({
@@ -126,35 +128,69 @@ IMPORTANT:
         await DealDB.update(dealId, { status: 'failed' });
       }
 
-      // Send contract PDF to the customer (for approved or review_required)
-      if (result.data.contractText && result.data.approvalStatus !== 'rejected' && lead.contact_email) {
-        try {
-          await this.sendContractEmail(dealId, lead, salesResult, result.data.contractText);
-        } catch (emailErr: any) {
-          console.error(`  ⚠️ Contract email failed (non-fatal): ${emailErr.message}`);
-        }
-      }
-
-      await TaskQueue.complete(taskId, { approvalStatus: result.data.approvalStatus, riskLevel: result.data.riskLevel });
-
-      return result;
+      await TaskQueue.complete(reviewTaskId, { approvalStatus: result.data.approvalStatus, riskLevel: result.data.riskLevel });
     } catch (error: any) {
-      await TaskQueue.fail(taskId, error.message);
+      await TaskQueue.fail(reviewTaskId, error.message);
       throw error;
     }
+
+    // ─── Task 2: Generate Contract PDF ────────────────────────────
+    if (result.data.contractText && result.data.approvalStatus !== 'rejected') {
+      const contractTaskId = await TaskQueue.createAndTrack({
+        sourceAgent: 'legal',
+        targetAgent: 'legal',
+        taskType: 'generate_contract',
+        title: `Generate contract: ${lead.company_name}`,
+        inputData: { dealId },
+        dealId,
+        leadId,
+        companyId: this.companyProfile?.id,
+      });
+
+      let pdfBuffer: Buffer | undefined;
+      try {
+        const deal = await DealDB.findById(dealId);
+        const rawProfile = this.companyProfile?.id
+          ? await CompanyProfileDB.getById(this.companyProfile.id)
+          : undefined;
+
+        if (deal && rawProfile) {
+          pdfBuffer = await generateContractPDF({ deal, lead, companyProfile: rawProfile, contractText: result.data.contractText });
+        }
+
+        await TaskQueue.complete(contractTaskId, { generated: !!pdfBuffer });
+      } catch (error: any) {
+        await TaskQueue.fail(contractTaskId, error.message);
+        console.error(`  ⚠️ Contract PDF generation failed (non-fatal): ${error.message}`);
+      }
+
+      // ─── Task 3: Send Contract Email ──────────────────────────
+      if (pdfBuffer && lead.contact_email) {
+        const sendTaskId = await TaskQueue.createAndTrack({
+          sourceAgent: 'legal',
+          targetAgent: 'email',
+          taskType: 'send_contract',
+          title: `Send contract: ${lead.company_name}`,
+          inputData: { dealId, recipientEmail: lead.contact_email },
+          dealId,
+          leadId,
+          companyId: this.companyProfile?.id,
+        });
+
+        try {
+          await this.sendContractEmail(dealId, lead, salesResult, pdfBuffer);
+          await TaskQueue.complete(sendTaskId, { sentTo: lead.contact_email });
+        } catch (error: any) {
+          await TaskQueue.fail(sendTaskId, error.message);
+          console.error(`  ⚠️ Contract email failed (non-fatal): ${error.message}`);
+        }
+      }
+    }
+
+    return result;
   }
 
-  private async sendContractEmail(dealId: string, lead: any, salesResult: any, contractText: string): Promise<void> {
-    const deal = await DealDB.findById(dealId);
-    if (!deal) return;
-
-    // Load the raw company profile for PDF generation (needs CompanyProfile type)
-    const rawProfile = this.companyProfile?.id
-      ? await CompanyProfileDB.getById(this.companyProfile.id)
-      : undefined;
-    if (!rawProfile) return;
-
-    const pdfBuffer = await generateContractPDF({ deal, lead, companyProfile: rawProfile, contractText });
+  private async sendContractEmail(dealId: string, lead: any, salesResult: any, pdfBuffer: Buffer): Promise<void> {
     const refId = dealId.slice(0, 8).toUpperCase();
 
     const emailAgent = new EmailAgent(this.companyProfile);

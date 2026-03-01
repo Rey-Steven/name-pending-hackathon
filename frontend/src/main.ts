@@ -18,6 +18,7 @@ import EmailsView from './views/EmailsView.vue'
 import Settings from './views/Settings.vue'
 import MarketResearchView from './views/MarketResearchView.vue'
 import SocialContentView from './views/SocialContentView.vue'
+import LegalReviews from './views/LegalReviews.vue'
 import LegalContracts from './views/LegalContracts.vue'
 import GemiCompanies from './views/GemiCompanies.vue'
 import ElorusContactsList from './views/ElorusContactsList.vue'
@@ -47,6 +48,7 @@ const router = createRouter({
         { path: 'emails', name: 'emails', component: EmailsView },
         { path: 'research', name: 'research', component: MarketResearchView },
         { path: 'content', name: 'content', component: SocialContentView },
+        { path: 'legal/reviews', name: 'legal-reviews', component: LegalReviews },
         { path: 'legal/contracts', name: 'legal-contracts', component: LegalContracts },
         { path: 'elorus-contacts', name: 'elorus-contacts', component: ElorusContactsList },
         { path: 'elorus-products', name: 'elorus-products', component: ElorusProductsList },
