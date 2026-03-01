@@ -12,14 +12,14 @@ Help traditional Greek businesses automate manual workflows with coordinating AI
 - **Sales Agent** (Blue): Deal qualification and closure
 - **Legal Agent** (Purple): Contract review and compliance
 - **Accounting Agent** (Red): Invoice generation with Greek FPA
-- **Email Notifications** (Orange): Customer communication
+- **Email Agent** (Orange): Customer communication
 
 ## 🏗️ Architecture
 
-- **Backend**: Node.js + TypeScript + Express + SQLite
+- **Backend**: Node.js + TypeScript + Express + Firebase Firestore
 - **Frontend**: Vue 3 + Pinia + Tailwind CSS
-- **AI**: Anthropic Claude (Sonnet + Haiku)
-- **Queue**: In-memory task queue
+- **AI**: Anthropic Claude (Opus + Sonnet + Haiku)
+- **Queue**: Firestore-backed task queue
 
 ## 🚀 Quick Start
 
@@ -83,15 +83,18 @@ All completed in ~10 seconds with zero human intervention.
 │       ├── agents/   # 5 AI agents
 │       ├── services/ # AI, Queue, Workflow
 │       ├── routes/   # REST API
-│       └── database/ # SQLite schema
+│       ├── database/ # Firebase Firestore
+│       └── types/    # TypeScript type definitions
 │
 ├── frontend/         # Vue 3 SPA
 │   └── src/
 │       ├── views/    # Pages
 │       ├── components/  # Reusable components
-│       └── stores/   # Pinia state management
+│       ├── stores/   # Pinia state management
+│       ├── api/      # API client
+│       └── utils/    # Utility functions
 │
-└── docs/             # Documentation
+└── scripts/          # Data import & utilities
 ```
 
 ## 📄 License
