@@ -32,6 +32,8 @@ export async function sendRealEmail(params: {
   inReplyTo?: string;
   references?: string;
   attachments?: Array<{ filename: string; content: Buffer }>;
+  senderName?: string;
+  companyContext?: { name?: string; description?: string; website?: string };
 }): Promise<{ sent: boolean; messageId?: string; error?: string }> {
   const fromUser = process.env.GMAIL_USER;
 
@@ -42,13 +44,15 @@ export async function sendRealEmail(params: {
     return { sent: false, error: 'No email transport configured' };
   }
 
+  const displayName = params.senderName || params.companyContext?.name || fromUser;
+
   try {
     const mailOptions: nodemailer.SendMailOptions = {
-      from: `"AgentFlow Demo" <${fromUser}>`,
+      from: `"${displayName}" <${fromUser}>`,
       to: params.to,
       subject: params.subject,
       text: params.body,
-      html: formatEmailHTML(params.subject, params.body),
+      html: formatEmailHTML(params.subject, params.body, params.companyContext),
       replyTo: fromUser,
       attachments: params.attachments?.map(a => ({
         filename: a.filename,
@@ -310,7 +314,7 @@ export async function fetchRepliesForDeal(dealId: string): Promise<InboxEmail | 
 
 // ─── HTML Formatting ──────────────────────────────────────
 
-function formatEmailHTML(subject: string, body: string): string {
+function formatEmailHTML(subject: string, body: string, company?: { name?: string; description?: string; website?: string }): string {
   const htmlBody = body
     .split('\n')
     .map(line => {
@@ -319,24 +323,37 @@ function formatEmailHTML(subject: string, body: string): string {
     })
     .join('\n');
 
+  const companyName = company?.name || '';
+  const companyDesc = company?.description || '';
+  const companyWebsite = company?.website || '';
+
+  const headerNameHtml = companyWebsite
+    ? `<a href="${companyWebsite}" style="text-decoration:none;color:#1e3a5f">${companyName}</a>`
+    : `<span style="color:#1e3a5f">${companyName}</span>`;
+
+  const footerLine = companyWebsite
+    ? `<a href="${companyWebsite}" style="color:#9ca3af;text-decoration:none">${companyWebsite}</a>`
+    : companyName;
+
   return `
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
 <body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333">
+  ${companyName ? `
   <div style="border-bottom:3px solid #3b82f6;padding-bottom:16px;margin-bottom:24px">
-    <h2 style="margin:0;color:#1e3a5f">🇬🇷 AgentFlow</h2>
-    <p style="margin:4px 0 0;color:#666;font-size:13px">Zero Human Company - Automated Business Platform</p>
-  </div>
+    <h2 style="margin:0;font-size:18px">${headerNameHtml}</h2>
+    ${companyDesc ? `<p style="margin:4px 0 0;color:#666;font-size:13px">${companyDesc}</p>` : ''}
+  </div>` : ''}
 
   <div style="margin-bottom:24px">
     ${htmlBody}
   </div>
 
+  ${footerLine ? `
   <div style="border-top:1px solid #e5e7eb;padding-top:16px;margin-top:24px;font-size:12px;color:#9ca3af">
-    <p>This email was generated and sent automatically by AgentFlow AI agents.</p>
-    <p>🎯 Marketing &middot; 💼 Sales &middot; ⚖️ Legal &middot; 📊 Accounting &middot; 📧 Email</p>
-  </div>
+    <p style="margin:0">${footerLine}</p>
+  </div>` : ''}
 </body>
 </html>`;
 }

@@ -45,6 +45,52 @@
       </div>
     </div>
 
+    <!-- Lead Profile -->
+    <div v-if="leadProfile" class="bg-white rounded-lg shadow p-6 mb-8">
+      <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+        <span>🧠</span>
+        <span>Lead Profile</span>
+        <span class="ml-auto text-xs font-normal px-2 py-1 rounded-full"
+          :class="leadProfile.company_informed ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'">
+          {{ leadProfile.company_informed ? 'Company introduced ✓' : 'Company not yet introduced' }}
+        </span>
+      </h2>
+      <div class="grid grid-cols-2 gap-6 text-sm">
+        <div v-if="leadProfile.company_background">
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Company Background</p>
+          <p class="text-gray-800">{{ leadProfile.company_background }}</p>
+        </div>
+        <div v-if="leadProfile.next_best_action">
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Next Best Action</p>
+          <p class="text-gray-800">{{ leadProfile.next_best_action }}</p>
+        </div>
+        <div v-if="leadProfile.stated_needs?.length">
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Stated Needs</p>
+          <ul class="list-disc list-inside space-y-0.5 text-gray-800">
+            <li v-for="need in leadProfile.stated_needs" :key="need">{{ need }}</li>
+          </ul>
+        </div>
+        <div v-if="leadProfile.pain_points?.length">
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Pain Points</p>
+          <ul class="list-disc list-inside space-y-0.5 text-gray-800">
+            <li v-for="point in leadProfile.pain_points" :key="point">{{ point }}</li>
+          </ul>
+        </div>
+        <div v-if="leadProfile.scale_volume">
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Scale / Volume</p>
+          <p class="text-gray-800">{{ leadProfile.scale_volume }}</p>
+        </div>
+        <div v-if="leadProfile.timeline">
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Timeline</p>
+          <p class="text-gray-800">{{ leadProfile.timeline }}</p>
+        </div>
+        <div v-if="leadProfile.budget_signals">
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Budget Signals</p>
+          <p class="text-gray-800">{{ leadProfile.budget_signals }}</p>
+        </div>
+      </div>
+    </div>
+
     <!-- Invoice -->
     <div v-if="deal.invoice" class="bg-white rounded-lg shadow p-6 mb-8">
       <h2 class="text-xl font-semibold mb-4 flex items-center space-x-2">
@@ -118,12 +164,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { dealsApi } from '../api/client'
 
 const route = useRoute()
 const deal = ref<any>(null)
+
+const leadProfile = computed(() => {
+  const raw = deal.value?.lead?.lead_profile
+  if (!raw) return null
+  try {
+    const p = typeof raw === 'string' ? JSON.parse(raw) : raw
+    // Only show if at least one meaningful field is present
+    const hasContent = p.company_background || p.stated_needs?.length || p.pain_points?.length ||
+      p.scale_volume || p.timeline || p.budget_signals || p.next_best_action
+    return hasContent ? p : null
+  } catch { return null }
+})
 const downloadingPDF = ref(false)
 
 function formatCurrency(amount: number) {

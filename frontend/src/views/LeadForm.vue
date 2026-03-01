@@ -63,7 +63,8 @@
             <input
               v-model="form.vatId"
               type="text"
-              @blur="lookupAfm"
+              maxlength="9"
+              @input="onVatIdInput"
               class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="e.g., 123456789"
             />
@@ -225,9 +226,15 @@ const form = ref({
   companyWebsite: '',
 })
 
+function onVatIdInput() {
+  const vatId = form.value.vatId.replace(/\D/g, '')
+  form.value.vatId = vatId.slice(0, 9)
+  if (vatId.length === 9) lookupAfm()
+}
+
 async function lookupAfm() {
   const vatId = form.value.vatId.trim()
-  if (!vatId) return
+  if (vatId.length !== 9) return
 
   afmLookupState.value = 'loading'
   try {

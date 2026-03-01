@@ -315,6 +315,11 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
         body: result.data.body,
         inReplyTo,
         references,
+        companyContext: this.companyProfile ? {
+          name: this.companyProfile.name,
+          description: this.companyProfile.description,
+          website: this.companyProfile.website,
+        } : undefined,
       });
 
       await EmailDB.create({
@@ -378,6 +383,11 @@ Compose a reply in Greek. Use the EXACT email "${customerEmail || originalEmail.
       inReplyTo: params.inReplyTo,
       references: params.references,
       attachments: params.attachments,
+      companyContext: this.companyProfile ? {
+        name: this.companyProfile.name,
+        description: this.companyProfile.description,
+        website: this.companyProfile.website,
+      } : undefined,
     });
 
     await EmailDB.create({
