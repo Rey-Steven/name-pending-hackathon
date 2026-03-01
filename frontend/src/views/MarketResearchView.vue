@@ -188,6 +188,9 @@
 import { ref, onMounted } from 'vue'
 import { researchApi, contentApi } from '../api/client'
 import { formatDate, formatDateTime } from '../utils/format'
+import { useToastStore } from '../stores/toast'
+
+const toast = useToastStore()
 
 const research = ref<any[]>([])
 const loading = ref(true)
@@ -226,8 +229,8 @@ async function triggerResearch() {
   try {
     await researchApi.trigger()
     await fetchResearch()
-  } catch (e: any) {
-    alert(e.response?.data?.error || 'Research failed')
+  } catch {
+    // Axios interceptor shows the error toast
   } finally {
     isRunning.value = false
   }
@@ -237,9 +240,9 @@ async function generateContent(researchId: string) {
   isCreatingContent.value = true
   try {
     await contentApi.trigger(researchId)
-    alert('Content drafts created! Check the Content page.')
-  } catch (e: any) {
-    alert(e.response?.data?.error || 'Content creation failed')
+    toast.addToast('Content drafts created! Check the Content page.', 'success')
+  } catch {
+    // Axios interceptor shows the error toast
   } finally {
     isCreatingContent.value = false
   }

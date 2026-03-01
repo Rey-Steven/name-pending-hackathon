@@ -62,6 +62,16 @@ export const useDashboardStore = defineStore('dashboard', () => {
     await Promise.all([fetchStats(), fetchLeads(), fetchDeals(), fetchTasks(), fetchAudit()])
   }
 
+  // Debounced version for SSE events to avoid rapid-fire refreshes
+  let _refreshTimer: ReturnType<typeof setTimeout> | null = null
+  function debouncedRefreshAll() {
+    if (_refreshTimer) clearTimeout(_refreshTimer)
+    _refreshTimer = setTimeout(() => {
+      _refreshTimer = null
+      refreshAll()
+    }, 500)
+  }
+
   function connectSSE() {
     if (eventSource.value) return
 
@@ -73,9 +83,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
         agentEvents.value = agentEvents.value.slice(0, 100)
       }
 
-      // Refresh data on relevant events
+      // Refresh data on relevant events (debounced to avoid rapid-fire calls)
       if (event.type === 'agent_completed' || event.type === 'workflow_completed') {
-        refreshAll()
+        debouncedRefreshAll()
       }
 
       if (event.type === 'workflow_completed') {

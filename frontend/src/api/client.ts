@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { useCompanyStore } from '../stores/company'
+import { useToastStore } from '../stores/toast'
 
 const api = axios.create({
   baseURL: '/api',
@@ -19,6 +20,21 @@ api.interceptors.request.use((config) => {
   }
   return config
 })
+
+// Auto-show toast on API errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    try {
+      const toast = useToastStore()
+      const message = error.response?.data?.error || error.message || 'Something went wrong'
+      toast.addToast(message, 'error')
+    } catch {
+      // Store may not be initialized yet
+    }
+    return Promise.reject(error)
+  }
+)
 
 export const leadsApi = {
   getAll: () => api.get('/leads'),

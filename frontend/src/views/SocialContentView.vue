@@ -230,8 +230,8 @@ async function saveEdit(id: string) {
     const idx = content.value.findIndex(c => c.id === id)
     if (idx >= 0) content.value[idx].post_text = editText.value
     editingId.value = null
-  } catch (e: any) {
-    alert(e.response?.data?.error || 'Failed to save')
+  } catch {
+    // Axios interceptor shows the error toast
   }
 }
 
@@ -240,8 +240,8 @@ async function updateStatus(id: string, status: string) {
     const res = await contentApi.updateStatus(id, status)
     const idx = content.value.findIndex(c => c.id === id)
     if (idx >= 0) content.value[idx] = res.data
-  } catch (e: any) {
-    alert(e.response?.data?.error || 'Failed to update status')
+  } catch {
+    // Axios interceptor shows the error toast
   }
 }
 
@@ -261,8 +261,8 @@ async function triggerContent() {
   try {
     await contentApi.trigger()
     await fetchContent()
-  } catch (e: any) {
-    alert(e.response?.data?.error || 'Content creation failed')
+  } catch {
+    // Axios interceptor shows the error toast
   } finally {
     isCreating.value = false
   }

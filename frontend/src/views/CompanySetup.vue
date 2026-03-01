@@ -481,6 +481,9 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useCompanyStore } from '../stores/company'
 import { companyApi } from '../api/client'
+import { useToastStore } from '../stores/toast'
+
+const toastStore = useToastStore()
 
 const TOTAL_STEPS = 5
 
@@ -678,7 +681,7 @@ async function saveKadCodes() {
     if (companyStore.profile) companyStore.profile.kad_codes = kadEditText.value
     editingKad.value = false
   } catch {
-    alert('Invalid JSON — please check the format.')
+    toastStore.addToast('Invalid JSON — please check the format.', 'error')
   } finally {
     savingKad.value = false
   }

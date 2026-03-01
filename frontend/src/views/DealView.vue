@@ -146,7 +146,7 @@ async function downloadPDF() {
     window.URL.revokeObjectURL(url)
   } catch (err) {
     console.error('PDF download failed:', err)
-    alert('Failed to generate PDF. Please try again.')
+    // Axios interceptor shows the error toast
   } finally {
     downloadingPDF.value = false
   }

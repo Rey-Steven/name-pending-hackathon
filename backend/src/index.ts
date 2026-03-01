@@ -14,7 +14,7 @@ import companyRoutes from './routes/company.routes';
 import emailsRoutes from './routes/emails.routes';
 import invoicesRoutes from './routes/invoices.routes';
 import settingsRoutes from './routes/settings.routes';
-import { AppSettingsDB } from './database/db';
+import { AppSettingsDB, DealDB, CompanyProfileDB } from './database/db';
 import researchRoutes from './routes/research.routes';
 import contentRoutes from './routes/content.routes';
 import gemiRoutes from './routes/gemi.routes';
@@ -88,13 +88,15 @@ async function pollForReplies() {
   polling = true;
 
   try {
-    const { getFirestore } = await import('./database/firebase');
-    const snap = await getFirestore()
-      .collection('deals')
-      .where('status', 'in', ['lead_contacted', 'in_pipeline', 'offer_sent', 'proposal_sent', 'negotiating'])
-      .get();
+    const REPLY_STATUSES = ['lead_contacted', 'in_pipeline', 'offer_sent', 'proposal_sent', 'negotiating'];
+    const companies = await CompanyProfileDB.getAll();
+    const allActiveDeals: { id: string }[] = [];
+    for (const company of companies) {
+      const deals = await DealDB.findByStatus(REPLY_STATUSES, company.id!);
+      allActiveDeals.push(...deals.map(d => ({ id: d.id! })));
+    }
 
-    const activeDeals = snap.docs.map(d => ({ id: d.id }));
+    const activeDeals = allActiveDeals;
 
     if (activeDeals.length === 0) {
       polling = false;

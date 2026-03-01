@@ -193,13 +193,16 @@ async function runScraperLoop(): Promise<void> {
 
         foundForThisCompany = true;
 
-        await GemiScraperStateDB.update({
-          last_company_id: currentCompanyId,
-          companies_found_this_run: foundThisRun,
-          total_companies_found: baseTotal + foundThisRun,
-          consecutive_misses: 0,
-          current_company_id: currentCompanyId,
-        });
+        // Save state every 5 companies found instead of after each one
+        if (foundThisRun % 5 === 0) {
+          await GemiScraperStateDB.update({
+            last_company_id: currentCompanyId,
+            companies_found_this_run: foundThisRun,
+            total_companies_found: baseTotal + foundThisRun,
+            consecutive_misses: 0,
+            current_company_id: currentCompanyId,
+          });
+        }
 
         break; // Found the chamber for this company_id, move on
       }
@@ -211,7 +214,7 @@ async function runScraperLoop(): Promise<void> {
       consecutiveMisses = 0;
     } else {
       consecutiveMisses++;
-      // Persist progress periodically (every 10 misses) to avoid excessive writes
+      // Persist progress every 10 misses
       if (consecutiveMisses % 10 === 0) {
         await GemiScraperStateDB.update({
           last_company_id: currentCompanyId,

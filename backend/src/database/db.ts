@@ -25,6 +25,16 @@ async function softDeleteDoc(collection: string, id: string): Promise<void> {
   });
 }
 
+// Count documents in a collection with optional status filter (much cheaper than fetching full docs)
+async function countDocs(collection: string, companyId: string, status?: string): Promise<number> {
+  let query: FirebaseFirestore.Query = fdb().collection(collection)
+    .where('company_id', '==', companyId)
+    .where('deleted_at', '==', null);
+  if (status) query = query.where('status', '==', status);
+  const snap = await query.count().get();
+  return snap.data().count;
+}
+
 // ─── Interfaces ───────────────────────────────────────────────
 
 export interface Lead {
@@ -240,9 +250,10 @@ export const LeadDB = {
   all: async (companyId: string): Promise<Lead[]> => {
     const snap = await fdb().collection('leads')
       .where('company_id', '==', companyId)
+      .where('deleted_at', '==', null)
+      .orderBy('created_at', 'desc')
       .get();
-    return snapToDocs<Lead>(snap)
-      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Lead[];
   },
 };
 
@@ -290,16 +301,19 @@ export const DealDB = {
   all: async (companyId: string): Promise<Deal[]> => {
     const snap = await fdb().collection('deals')
       .where('company_id', '==', companyId)
+      .where('deleted_at', '==', null)
+      .orderBy('created_at', 'desc')
       .get();
-    return snapToDocs<Deal>(snap)
-      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Deal[];
   },
 
   findByStatus: async (statuses: string[], companyId: string): Promise<Deal[]> => {
     const snap = await fdb().collection('deals')
       .where('company_id', '==', companyId)
+      .where('deleted_at', '==', null)
+      .where('status', 'in', statuses)
       .get();
-    return snapToDocs<Deal>(snap).filter(d => statuses.includes(d.status || ''));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Deal[];
   },
 };
 
@@ -340,9 +354,10 @@ export const TaskDB = {
     const snap = await fdb().collection('tasks')
       .where('target_agent', '==', targetAgent)
       .where('company_id', '==', companyId)
+      .where('status', '==', 'pending')
+      .where('deleted_at', '==', null)
       .get();
-    return snapToDocs<Task>(snap)
-      .filter(t => t.status === 'pending')
+    return (snap.docs.map(d => ({ id: d.id, ...d.data() })) as Task[])
       .sort((a, b) => {
         const pDiff = (b.priority ?? 0) - (a.priority ?? 0);
         if (pDiff !== 0) return pDiff;
@@ -363,15 +378,19 @@ export const TaskDB = {
   all: async (companyId: string): Promise<Task[]> => {
     const snap = await fdb().collection('tasks')
       .where('company_id', '==', companyId)
+      .where('deleted_at', '==', null)
+      .orderBy('created_at', 'desc')
       .get();
-    return snapToDocs<Task>(snap)
-      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Task[];
   },
 
   findByDeal: async (dealId: string): Promise<Task[]> => {
-    const snap = await fdb().collection('tasks').where('deal_id', '==', dealId).get();
-    const tasks = snapToDocs<Task>(snap);
-    return tasks.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    const snap = await fdb().collection('tasks')
+      .where('deal_id', '==', dealId)
+      .where('deleted_at', '==', null)
+      .orderBy('created_at', 'desc')
+      .get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Task[];
   },
 };
 
@@ -412,18 +431,24 @@ export const InvoiceDB = {
   },
 
   findByDeal: async (dealId: string): Promise<Invoice | undefined> => {
-    const snap = await fdb().collection('invoices').where('deal_id', '==', dealId).get();
+    const snap = await fdb().collection('invoices')
+      .where('deal_id', '==', dealId)
+      .where('deleted_at', '==', null)
+      .orderBy('created_at', 'desc')
+      .limit(1)
+      .get();
     if (snap.empty) return undefined;
-    const docs = snapToDocs<Invoice>(snap);
-    return docs.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0];
+    const doc = snap.docs[0];
+    return { id: doc.id, ...doc.data() } as Invoice;
   },
 
   all: async (companyId: string): Promise<Invoice[]> => {
     const snap = await fdb().collection('invoices')
       .where('company_id', '==', companyId)
+      .where('deleted_at', '==', null)
+      .orderBy('created_at', 'desc')
       .get();
-    return snapToDocs<Invoice>(snap)
-      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Invoice[];
   },
 
   delete: async (id: string): Promise<void> => softDeleteDoc('invoices', id),
@@ -485,41 +510,50 @@ export const EmailDB = {
   all: async (companyId: string): Promise<Email[]> => {
     const snap = await fdb().collection('emails')
       .where('company_id', '==', companyId)
+      .where('deleted_at', '==', null)
+      .orderBy('created_at', 'desc')
       .get();
-    return snapToDocs<Email>(snap)
-      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Email[];
   },
 
   // Used by email-transport.ts to match inbox replies to our sent emails
   findSent: async (companyId: string): Promise<Array<{ id: string; deal_id: string | null; recipient_email: string; subject: string }>> => {
-    const snap = await fdb().collection('emails').where('company_id', '==', companyId).get();
-    return snap.docs
-      .filter(d => !d.data().deleted_at && d.data().status === 'sent')
-      .map(d => ({
-        id: d.id,
-        deal_id: (d.data().deal_id as string | null) || null,
-        recipient_email: d.data().recipient_email as string,
-        subject: d.data().subject as string,
-      }));
+    const snap = await fdb().collection('emails')
+      .where('company_id', '==', companyId)
+      .where('status', '==', 'sent')
+      .where('deleted_at', '==', null)
+      .get();
+    return snap.docs.map(d => ({
+      id: d.id,
+      deal_id: (d.data().deal_id as string | null) || null,
+      recipient_email: d.data().recipient_email as string,
+      subject: d.data().subject as string,
+    }));
   },
 
   findSentByDeal: async (dealId: string): Promise<Array<{ id: string; recipient_email: string; subject: string; created_at: string }>> => {
-    const snap = await fdb().collection('emails').where('deal_id', '==', dealId).get();
-    const docs = snap.docs
-      .filter(d => !d.data().deleted_at && d.data().status === 'sent')
+    const snap = await fdb().collection('emails')
+      .where('deal_id', '==', dealId)
+      .where('status', '==', 'sent')
+      .where('deleted_at', '==', null)
+      .get();
+    return snap.docs
       .map(d => ({
         id: d.id,
         recipient_email: d.data().recipient_email as string,
         subject: d.data().subject as string,
         created_at: (d.data().created_at as string) || '',
-      }));
-    return docs.sort((a, b) => b.created_at.localeCompare(a.created_at));
+      }))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
   },
 
   findByDeal: async (dealId: string): Promise<Email[]> => {
-    const snap = await fdb().collection('emails').where('deal_id', '==', dealId).get();
-    const emails = snapToDocs<Email>(snap);
-    return emails.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+    const snap = await fdb().collection('emails')
+      .where('deal_id', '==', dealId)
+      .where('deleted_at', '==', null)
+      .orderBy('created_at', 'asc')
+      .get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })) as Email[];
   },
 
   findByMessageId: async (messageId: string): Promise<Email | undefined> => {
@@ -561,10 +595,15 @@ export const LegalValidationDB = {
   },
 
   findByDeal: async (dealId: string): Promise<LegalValidation | undefined> => {
-    const snap = await fdb().collection('legal_validations').where('deal_id', '==', dealId).get();
+    const snap = await fdb().collection('legal_validations')
+      .where('deal_id', '==', dealId)
+      .where('deleted_at', '==', null)
+      .orderBy('created_at', 'desc')
+      .limit(1)
+      .get();
     if (snap.empty) return undefined;
-    const docs = snapToDocs<LegalValidation>(snap);
-    return docs.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0];
+    const doc = snap.docs[0];
+    return { id: doc.id, ...doc.data() } as LegalValidation;
   },
 
   update: async (id: string, updates: Partial<LegalValidation>): Promise<void> => {
@@ -639,16 +678,21 @@ export const MarketResearchDB = {
     const snap = await fdb().collection('market_research')
       .where('company_id', '==', companyId)
       .where('status', '==', 'completed')
+      .where('deleted_at', '==', null)
+      .orderBy('created_at', 'desc')
+      .limit(1)
       .get();
-    const docs = snapToDocs<MarketResearch>(snap)
-      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-    return docs[0];
+    if (snap.empty) return undefined;
+    const doc = snap.docs[0];
+    return { id: doc.id, ...doc.data() } as MarketResearch;
   },
 
   hasRunning: async (companyId: string): Promise<boolean> => {
     const snap = await fdb().collection('market_research')
       .where('company_id', '==', companyId)
       .where('status', '==', 'running')
+      .where('deleted_at', '==', null)
+      .limit(1)
       .get();
     return !snap.empty;
   },
@@ -656,9 +700,10 @@ export const MarketResearchDB = {
   all: async (companyId: string): Promise<MarketResearch[]> => {
     const snap = await fdb().collection('market_research')
       .where('company_id', '==', companyId)
+      .where('deleted_at', '==', null)
+      .orderBy('created_at', 'desc')
       .get();
-    return snapToDocs<MarketResearch>(snap)
-      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })) as MarketResearch[];
   },
 
   delete: async (id: string): Promise<void> => softDeleteDoc('market_research', id),
@@ -724,16 +769,18 @@ export const SocialContentDB = {
   all: async (companyId: string): Promise<SocialContent[]> => {
     const snap = await fdb().collection('social_content')
       .where('company_id', '==', companyId)
+      .where('deleted_at', '==', null)
+      .orderBy('created_at', 'desc')
       .get();
-    return snapToDocs<SocialContent>(snap)
-      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })) as SocialContent[];
   },
 
   findByResearch: async (researchId: string): Promise<SocialContent[]> => {
     const snap = await fdb().collection('social_content')
       .where('research_id', '==', researchId)
+      .where('deleted_at', '==', null)
       .get();
-    return snapToDocs<SocialContent>(snap);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })) as SocialContent[];
   },
 
   delete: async (id: string): Promise<void> => softDeleteDoc('social_content', id),
@@ -760,6 +807,118 @@ export const AuditLog = {
   },
 };
 
+// ─── Dashboard Stats (optimized aggregation) ─────────────────
+// Uses count() aggregation where possible to avoid fetching full documents
+
+export const DashboardStatsDB = {
+  getStats: async (companyId: string) => {
+    // Parallel count queries for collections that only need counts
+    const [
+      // Leads
+      leadsTotal, leadsNew, leadsQualified, leadsConverted,
+      // Tasks
+      tasksTotal, tasksPending, tasksProcessing, tasksCompleted, tasksFailed,
+      // Emails
+      emailsTotal, emailsSent,
+      // Research
+      researchTotal, researchCompleted,
+      // Content
+      contentTotal, contentDrafts, contentApproved, contentPosted,
+      // Deals (need full docs for value aggregation)
+      deals,
+      // Invoices (need full docs for amount aggregation)
+      invoices,
+      // Latest research (just 1 doc)
+      latestResearch,
+    ] = await Promise.all([
+      // Lead counts
+      countDocs('leads', companyId),
+      countDocs('leads', companyId, 'new'),
+      countDocs('leads', companyId, 'qualified'),
+      countDocs('leads', companyId, 'converted'),
+      // Task counts
+      countDocs('tasks', companyId),
+      countDocs('tasks', companyId, 'pending'),
+      countDocs('tasks', companyId, 'processing'),
+      countDocs('tasks', companyId, 'completed'),
+      countDocs('tasks', companyId, 'failed'),
+      // Email counts
+      countDocs('emails', companyId),
+      countDocs('emails', companyId, 'sent'),
+      // Research counts
+      countDocs('market_research', companyId),
+      countDocs('market_research', companyId, 'completed'),
+      // Content counts
+      countDocs('social_content', companyId),
+      countDocs('social_content', companyId, 'draft'),
+      countDocs('social_content', companyId, 'approved'),
+      countDocs('social_content', companyId, 'posted'),
+      // Deals - full docs needed for value sums
+      DealDB.all(companyId),
+      // Invoices - full docs needed for amount sums
+      InvoiceDB.all(companyId),
+      // Latest research date
+      MarketResearchDB.getLatest(companyId),
+    ]);
+
+    const OPEN_STATUSES = ['lead_contacted', 'in_pipeline', 'offer_sent', 'proposal_sent', 'negotiating', 'legal_review', 'invoicing'];
+    const openDeals = deals.filter(d => OPEN_STATUSES.includes(d.status ?? ''));
+    const wonDeals = deals.filter(d => ['closed_won', 'completed'].includes(d.status ?? ''));
+    const lostDeals = deals.filter(d => ['closed_lost', 'failed'].includes(d.status ?? ''));
+    const closedTotal = wonDeals.length + lostDeals.length;
+
+    return {
+      leads: {
+        total: leadsTotal,
+        new: leadsNew,
+        qualified: leadsQualified,
+        converted: leadsConverted,
+      },
+      deals: {
+        total: deals.length,
+        open: openDeals.length,
+        lead_contacted: deals.filter(d => d.status === 'lead_contacted').length,
+        in_pipeline: deals.filter(d => d.status === 'in_pipeline').length,
+        offer_sent: deals.filter(d => d.status === 'offer_sent').length,
+        closed_won: wonDeals.length,
+        closed_lost: lostDeals.length,
+        pipelineValue: openDeals.reduce((sum, d) => sum + (d.total_amount || 0), 0),
+        wonValue: wonDeals.reduce((sum, d) => sum + (d.total_amount || 0), 0),
+        winRate: closedTotal > 0 ? Math.round((wonDeals.length / closedTotal) * 100) : null,
+        totalValue: deals.reduce((sum, d) => sum + (d.total_amount || 0), 0),
+        pending: deals.filter(d => d.status === 'pending').length,
+        completed: deals.filter(d => d.status === 'completed').length,
+      },
+      tasks: {
+        total: tasksTotal,
+        pending: tasksPending,
+        processing: tasksProcessing,
+        completed: tasksCompleted,
+        failed: tasksFailed,
+      },
+      invoices: {
+        total: invoices.length,
+        totalAmount: invoices.reduce((sum, i) => sum + (i.total_amount || 0), 0),
+      },
+      emails: {
+        total: emailsTotal,
+        sent: emailsSent,
+      },
+      research: {
+        total: researchTotal,
+        completed: researchCompleted,
+        latestDate: latestResearch?.created_at || null,
+      },
+      content: {
+        total: contentTotal,
+        drafts: contentDrafts,
+        approved: contentApproved,
+        posted: contentPosted,
+      },
+    };
+  },
+};
+
 // ─── App Settings ─────────────────────────────────────────────
 // Stored in Firebase at settings/app
 
@@ -781,11 +940,21 @@ const DEFAULT_SETTINGS: AppSettings = {
   max_offer_rounds: 3,
 };
 
+// In-memory cache with TTL for frequently read settings
+let _settingsCache: { data: AppSettings; expiry: number } | null = null;
+const SETTINGS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 export const AppSettingsDB = {
   get: async (): Promise<AppSettings> => {
+    if (_settingsCache && Date.now() < _settingsCache.expiry) {
+      return _settingsCache.data;
+    }
     const doc = await fdb().doc('settings/app').get();
-    if (!doc.exists) return { ...DEFAULT_SETTINGS };
-    return { ...DEFAULT_SETTINGS, ...doc.data() } as AppSettings;
+    const settings = doc.exists
+      ? { ...DEFAULT_SETTINGS, ...doc.data() } as AppSettings
+      : { ...DEFAULT_SETTINGS };
+    _settingsCache = { data: settings, expiry: Date.now() + SETTINGS_CACHE_TTL_MS };
+    return settings;
   },
 
   update: async (updates: Partial<AppSettings>): Promise<AppSettings> => {
@@ -796,6 +965,7 @@ export const AppSettingsDB = {
       if (updates[key] !== undefined) safe[key] = updates[key] as number;
     }
     await fdb().doc('settings/app').set(safe, { merge: true });
+    _settingsCache = null; // Invalidate cache on write
     return AppSettingsDB.get();
   },
 };
@@ -804,21 +974,35 @@ export const AppSettingsDB = {
 // Multi-company: company_profiles/{auto-id} collection
 // Active company pointer: settings/active.active_company_id
 
+let _activeIdCache: { data: string | null; expiry: number } | null = null;
+let _allProfilesCache: { data: CompanyProfile[]; expiry: number } | null = null;
+const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function invalidateProfileCaches() {
+  _activeIdCache = null;
+  _allProfilesCache = null;
+}
+
 export const CompanyProfileDB = {
   // Resolve active company
   get: async (): Promise<CompanyProfile | undefined> => {
-    const settingsDoc = await fdb().doc('settings/active').get();
-    if (!settingsDoc.exists) return undefined;
-    const activeId = settingsDoc.data()!.active_company_id as string | null;
+    const activeId = await CompanyProfileDB.getActiveId();
     if (!activeId) return undefined;
     const doc = await fdb().collection('company_profiles').doc(activeId).get();
     return docToObj<CompanyProfile>(doc);
   },
 
   getAll: async (): Promise<CompanyProfile[]> => {
-    const snap = await fdb().collection('company_profiles').get();
-    return snapToDocs<CompanyProfile>(snap)
-      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    if (_allProfilesCache && Date.now() < _allProfilesCache.expiry) {
+      return _allProfilesCache.data;
+    }
+    const snap = await fdb().collection('company_profiles')
+      .where('deleted_at', '==', null)
+      .orderBy('created_at', 'desc')
+      .get();
+    const profiles = snap.docs.map(d => ({ id: d.id, ...d.data() })) as CompanyProfile[];
+    _allProfilesCache = { data: profiles, expiry: Date.now() + PROFILE_CACHE_TTL_MS };
+    return profiles;
   },
 
   getById: async (id: string): Promise<CompanyProfile | undefined> => {
@@ -827,13 +1011,22 @@ export const CompanyProfileDB = {
   },
 
   getActiveId: async (): Promise<string | null> => {
+    if (_activeIdCache && Date.now() < _activeIdCache.expiry) {
+      return _activeIdCache.data;
+    }
     const doc = await fdb().doc('settings/active').get();
-    if (!doc.exists) return null;
-    return (doc.data()!.active_company_id as string) || null;
+    if (!doc.exists) {
+      _activeIdCache = { data: null, expiry: Date.now() + PROFILE_CACHE_TTL_MS };
+      return null;
+    }
+    const activeId = (doc.data()!.active_company_id as string) || null;
+    _activeIdCache = { data: activeId, expiry: Date.now() + PROFILE_CACHE_TTL_MS };
+    return activeId;
   },
 
   setActive: async (id: string): Promise<void> => {
     await fdb().doc('settings/active').set({ active_company_id: id });
+    invalidateProfileCaches();
   },
 
   create: async (profile: CompanyProfile): Promise<string> => {
@@ -866,6 +1059,7 @@ export const CompanyProfileDB = {
     });
     // Make the new company active immediately
     await fdb().doc('settings/active').set({ active_company_id: ref.id });
+    invalidateProfileCaches();
     return ref.id;
   },
 
@@ -875,21 +1069,21 @@ export const CompanyProfileDB = {
       ...rest,
       updated_at: new Date().toISOString(),
     });
+    invalidateProfileCaches();
   },
 
   delete: async (id: string): Promise<void> => {
     await softDeleteDoc('company_profiles', id);
     // Clear the active pointer if this was the active company
-    const settingsDoc = await fdb().doc('settings/active').get();
-    if (settingsDoc.exists && settingsDoc.data()!.active_company_id === id) {
+    const activeId = await CompanyProfileDB.getActiveId();
+    if (activeId === id) {
       await fdb().doc('settings/active').set({ active_company_id: null });
     }
+    invalidateProfileCaches();
   },
 
   isSetupComplete: async (): Promise<boolean> => {
-    const settingsDoc = await fdb().doc('settings/active').get();
-    if (!settingsDoc.exists) return false;
-    const activeId = settingsDoc.data()!.active_company_id as string | null;
+    const activeId = await CompanyProfileDB.getActiveId();
     if (!activeId) return false;
     const doc = await fdb().collection('company_profiles').doc(activeId).get();
     return doc.exists && !doc.data()!.deleted_at;

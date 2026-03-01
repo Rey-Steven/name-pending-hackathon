@@ -208,6 +208,8 @@
     <main :class="isSetupPage ? '' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'">
       <router-view :key="isSetupPage ? 'setup' : (String(route.params.companyId || 'default'))" />
     </main>
+
+    <ToastContainer />
   </div>
 </template>
 
@@ -215,6 +217,7 @@
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCompanyStore } from './stores/company'
+import ToastContainer from './components/ToastContainer.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -265,8 +268,8 @@ async function removeCompany(id: string) {
   if (!confirm('Delete this company profile?')) return
   try {
     await companyStore.deleteCompany(id)
-  } catch (err: any) {
-    alert(err.response?.data?.error || 'Could not delete company')
+  } catch {
+    // Axios interceptor shows the error toast
   }
 }
 

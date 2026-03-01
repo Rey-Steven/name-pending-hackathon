@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { LeadDB, DealDB, TaskDB, InvoiceDB, EmailDB, AuditLog, CompanyProfileDB, MarketResearchDB, SocialContentDB } from '../database/db';
+import { AuditLog, CompanyProfileDB, DashboardStatsDB } from '../database/db';
 import { SSEEvent } from '../types';
 import { TaskLogger } from '../services/task-logger';
 
@@ -9,75 +9,14 @@ const router = Router();
 const sseClients: Set<Response> = new Set();
 
 // GET /api/dashboard/stats - Dashboard statistics
+// Uses count() aggregation for collections that only need counts (leads, tasks, emails, research, content)
+// Only fetches full documents for deals and invoices (needed for value sums)
 router.get('/stats', async (req: Request, res: Response) => {
   try {
     const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
     if (!companyId) return res.status(400).json({ error: 'No active company' });
-    const [leads, deals, tasks, invoices, emails, research, content] = await Promise.all([
-      LeadDB.all(companyId),
-      DealDB.all(companyId),
-      TaskDB.all(companyId),
-      InvoiceDB.all(companyId),
-      EmailDB.all(companyId),
-      MarketResearchDB.all(companyId),
-      SocialContentDB.all(companyId),
-    ]);
-
-    const openDeals = deals.filter(d => ['lead_contacted', 'in_pipeline', 'offer_sent', 'proposal_sent', 'negotiating', 'legal_review', 'invoicing'].includes(d.status ?? ''));
-    const wonDeals = deals.filter(d => ['closed_won', 'completed'].includes(d.status ?? ''));
-    const lostDeals = deals.filter(d => ['closed_lost', 'failed'].includes(d.status ?? ''));
-    const closedTotal = wonDeals.length + lostDeals.length;
-
-    res.json({
-      leads: {
-        total: leads.length,
-        new: leads.filter(l => l.status === 'new').length,
-        qualified: leads.filter(l => l.status === 'qualified').length,
-        converted: leads.filter(l => l.status === 'converted').length,
-      },
-      deals: {
-        total: deals.length,
-        open: openDeals.length,
-        lead_contacted: deals.filter(d => d.status === 'lead_contacted').length,
-        in_pipeline: deals.filter(d => d.status === 'in_pipeline').length,
-        offer_sent: deals.filter(d => d.status === 'offer_sent').length,
-        closed_won: wonDeals.length,
-        closed_lost: lostDeals.length,
-        pipelineValue: openDeals.reduce((sum, d) => sum + (d.total_amount || 0), 0),
-        wonValue: wonDeals.reduce((sum, d) => sum + (d.total_amount || 0), 0),
-        winRate: closedTotal > 0 ? Math.round((wonDeals.length / closedTotal) * 100) : null,
-        totalValue: deals.reduce((sum, d) => sum + (d.total_amount || 0), 0),
-        // legacy
-        pending: deals.filter(d => d.status === 'pending').length,
-        completed: deals.filter(d => d.status === 'completed').length,
-      },
-      tasks: {
-        total: tasks.length,
-        pending: tasks.filter(t => t.status === 'pending').length,
-        processing: tasks.filter(t => t.status === 'processing').length,
-        completed: tasks.filter(t => t.status === 'completed').length,
-        failed: tasks.filter(t => t.status === 'failed').length,
-      },
-      invoices: {
-        total: invoices.length,
-        totalAmount: invoices.reduce((sum, i) => sum + (i.total_amount || 0), 0),
-      },
-      emails: {
-        total: emails.length,
-        sent: emails.filter(e => e.status === 'sent').length,
-      },
-      research: {
-        total: research.length,
-        completed: research.filter(r => r.status === 'completed').length,
-        latestDate: research[0]?.created_at || null,
-      },
-      content: {
-        total: content.length,
-        drafts: content.filter(c => c.status === 'draft').length,
-        approved: content.filter(c => c.status === 'approved').length,
-        posted: content.filter(c => c.status === 'posted').length,
-      },
-    });
+    const stats = await DashboardStatsDB.getStats(companyId);
+    res.json(stats);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
