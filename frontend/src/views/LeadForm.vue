@@ -226,7 +226,18 @@ async function lookupAfm() {
 
   afmLookupState.value = 'loading'
   try {
-    const { data } = await leadsApi.lookupAfm(vatId)
+    const res = await fetch('https://publicity.businessportal.gr/api/autocomplete/butler%20chat', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9,el;q=0.8',
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+      },
+      body: JSON.stringify({ token: vatId, language: 'el' }),
+    })
+    const data = await res.json()
 
     // The API may return a single object or an array — normalise to one record
     const record = Array.isArray(data) ? data[0] : data
