@@ -132,6 +132,33 @@ export const contentApi = {
   regenerateImages: (id: string) => api.post(`/content/${id}/regenerate-images`),
 }
 
+export const elorusApi = {
+  // Status & connection
+  status: () => api.get('/elorus/status'),
+  testConnection: () => api.get('/elorus/test-connection'),
+  // Contacts
+  listContacts: (params?: Record<string, any>) => api.get('/elorus/contacts', { params }),
+  createContact: (data: Record<string, any>) => api.post('/elorus/contacts', data),
+  getContact: (id: string) => api.get(`/elorus/contacts/${id}`),
+  // Products
+  listProducts: (params?: Record<string, any>) => api.get('/elorus/products', { params }),
+  getProduct: (id: string) => api.get(`/elorus/products/${id}`),
+  // Estimates (Offers)
+  listEstimates: (params?: Record<string, any>) => api.get('/elorus/estimates', { params }),
+  createEstimate: (data: Record<string, any>) => api.post('/elorus/estimates', data),
+  getEstimate: (id: string) => api.get(`/elorus/estimates/${id}`),
+  getEstimatePDF: (id: string) => api.get(`/elorus/estimates/${id}/pdf`, { responseType: 'blob' }),
+  updateEstimate: (id: string, data: Record<string, any>) => api.patch(`/elorus/estimates/${id}`, data),
+  // Invoices
+  listInvoices: (params?: Record<string, any>) => api.get('/elorus/invoices', { params }),
+  createInvoice: (data: Record<string, any>) => api.post('/elorus/invoices', data),
+  getInvoice: (id: string) => api.get(`/elorus/invoices/${id}`),
+  getInvoicePDF: (id: string) => api.get(`/elorus/invoices/${id}/pdf`, { responseType: 'blob' }),
+  // Lookup
+  listTaxes: () => api.get('/elorus/taxes'),
+  listDocumentTypes: (params?: Record<string, any>) => api.get('/elorus/document-types', { params }),
+}
+
 export const gemiApi = {
   getStatus: () => api.get('/gemi/status'),
   trigger: () => api.post('/gemi/trigger'),

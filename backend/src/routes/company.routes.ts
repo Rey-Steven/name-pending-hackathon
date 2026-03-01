@@ -99,7 +99,7 @@ router.post(
         name, website, industry, userText,
         pricingModel, minDealValue, maxDealValue,
         keyProducts, uniqueSellingPoints, communicationLanguage,
-        gemiNumber,
+        gemiNumber, elorusApiKey, elorusOrganizationId, elorusBaseUrl,
       } = req.body;
 
       if (!name) {
@@ -187,6 +187,9 @@ router.post(
         unique_selling_points: uniqueSellingPoints || undefined,
         communication_language: communicationLanguage || 'Greek',
         gemi_number: gemiNumber || undefined,
+        elorus_api_key: elorusApiKey || undefined,
+        elorus_organization_id: elorusOrganizationId || undefined,
+        elorus_base_url: elorusBaseUrl || undefined,
         setup_complete: true,
       } as any);
 
@@ -210,7 +213,7 @@ router.put('/', async (req: Request, res: Response) => {
     name, website, industry, kad_codes,
     pricing_model, min_deal_value, max_deal_value,
     key_products, unique_selling_points, communication_language,
-    gemi_number,
+    gemi_number, elorus_api_key, elorus_organization_id, elorus_base_url,
   } = req.body;
   const updates: any = {};
   if (name !== undefined) updates.name = name;
@@ -224,6 +227,9 @@ router.put('/', async (req: Request, res: Response) => {
   if (unique_selling_points !== undefined) updates.unique_selling_points = unique_selling_points;
   if (communication_language !== undefined) updates.communication_language = communication_language;
   if (gemi_number !== undefined) updates.gemi_number = gemi_number;
+  if (elorus_api_key !== undefined) updates.elorus_api_key = elorus_api_key;
+  if (elorus_organization_id !== undefined) updates.elorus_organization_id = elorus_organization_id;
+  if (elorus_base_url !== undefined) updates.elorus_base_url = elorus_base_url;
   await CompanyProfileDB.update(activeId, updates);
   res.json({ success: true });
 });

@@ -59,6 +59,7 @@ export interface Lead {
   lead_score?: 'A' | 'B' | 'C';
   lead_profile?: string | null;  // JSON: agent-built profile, updated after each reply
   status?: string;
+  elorus_contact_id?: string;
   created_at?: string;
   updated_at?: string;
   deleted_at?: string | null;
@@ -81,6 +82,8 @@ export interface Deal {
   follow_up_count?: number;
   satisfaction_sent?: boolean;
   status?: string;
+  elorus_estimate_id?: string;
+  elorus_invoice_id?: string;
   created_at?: string;
   updated_at?: string;
   deleted_at?: string | null;
@@ -197,6 +200,9 @@ export interface CompanyProfile {
   unique_selling_points?: string;  // free-text bullet points
   communication_language?: string; // 'Greek' | 'English' | 'Greek and English'
   gemi_number?: string;            // GEMI registry number (e.g. "123456703000")
+  elorus_api_key?: string;         // Elorus API key (per-company)
+  elorus_organization_id?: string; // Elorus organization ID (per-company)
+  elorus_base_url?: string;        // Elorus web base URL (e.g. https://demo-xxx.elorus.com)
   created_at?: string;
   updated_at?: string;
   deleted_at?: string | null;
@@ -1062,6 +1068,8 @@ export const CompanyProfileDB = {
       unique_selling_points: profile.unique_selling_points || null,
       communication_language: profile.communication_language || 'Greek',
       gemi_number: profile.gemi_number || null,
+      elorus_api_key: profile.elorus_api_key || null,
+      elorus_organization_id: profile.elorus_organization_id || null,
       created_at: now,
       updated_at: now,
       deleted_at: null,

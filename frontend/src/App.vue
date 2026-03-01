@@ -283,6 +283,9 @@ const navItems: NavItem[] = [
   { label: 'Sales', children: [
     { label: 'Leads', subpath: 'leads' },
     { label: 'Deals', subpath: 'deals' },
+    { label: 'Contacts', subpath: 'elorus-contacts' },
+    { label: 'Products', subpath: 'elorus-products' },
+    { label: 'Offers', subpath: 'elorus-offers' },
   ]},
   { label: 'Marketing', children: [
     { label: 'Research', subpath: 'research' },

@@ -201,6 +201,60 @@
             </div>
           </div>
 
+          <!-- Elorus Integration -->
+          <div class="border-t border-gray-200 pt-5">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="text-lg">📄</span>
+              <label class="text-sm font-semibold text-gray-700">Elorus Integration</label>
+              <span class="text-xs text-gray-400">(optional — for invoicing & offers)</span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">API Key</label>
+                <input
+                  v-model="form.elorusApiKey"
+                  type="password"
+                  placeholder="Your Elorus API token"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Organization ID</label>
+                <input
+                  v-model="form.elorusOrganizationId"
+                  type="text"
+                  placeholder="e.g. 128759403567807"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+            </div>
+            <div class="mt-3">
+              <label class="block text-xs font-medium text-gray-600 mb-1">Elorus Base URL</label>
+              <input
+                v-model="form.elorusBaseUrl"
+                type="text"
+                placeholder="e.g. https://demo-2249XXXXXX6769.elorus.com"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            </div>
+
+            <div class="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                @click="testElorusConnection"
+                :disabled="!form.elorusApiKey || !form.elorusOrganizationId || testingElorus"
+                class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                :class="elorusTestResult === true ? 'border-green-300 bg-green-50 text-green-700' : elorusTestResult === false ? 'border-red-300 bg-red-50 text-red-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'"
+              >
+                {{ testingElorus ? 'Testing...' : elorusTestResult === true ? 'Connected' : elorusTestResult === false ? 'Failed — retry' : 'Test Connection' }}
+              </button>
+              <span v-if="elorusTestMessage" class="text-xs" :class="elorusTestResult ? 'text-green-600' : 'text-red-500'">{{ elorusTestMessage }}</span>
+            </div>
+
+            <p class="text-xs text-gray-400 mt-2">Find your API key in Elorus → User Profile. Organization ID is in your Elorus URL.</p>
+          </div>
+
           <!-- Unique selling points -->
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Unique Selling Points</label>
@@ -451,6 +505,69 @@
             </div>
           </div>
 
+          <!-- Elorus Integration (per-company) -->
+          <div class="bg-gray-50 rounded-xl p-4">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-semibold text-gray-700">📄 Elorus Integration</p>
+                <span
+                  v-if="elorusConnected"
+                  class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium"
+                >
+                  Connected
+                </span>
+                <span
+                  v-else
+                  class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium"
+                >
+                  Not configured
+                </span>
+              </div>
+            </div>
+            <p class="text-xs text-gray-500 mb-3">Connect your Elorus account to manage invoices, offers, products, and contacts.</p>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">API Key</label>
+                <input
+                  v-model="form.elorusApiKey"
+                  type="password"
+                  placeholder="Your Elorus API token"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Organization ID</label>
+                <input
+                  v-model="form.elorusOrganizationId"
+                  type="text"
+                  placeholder="e.g. 128759403567807"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+                />
+              </div>
+            </div>
+            <div class="mt-3">
+              <label class="block text-xs font-medium text-gray-600 mb-1">Elorus Base URL</label>
+              <input
+                v-model="form.elorusBaseUrl"
+                type="text"
+                placeholder="e.g. https://demo-2249XXXXXX6769.elorus.com"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+              />
+            </div>
+            <div class="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                @click="saveElorusCreds"
+                :disabled="!form.elorusApiKey || !form.elorusOrganizationId || savingElorus"
+                class="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {{ savingElorus ? 'Saving...' : 'Save & Test Connection' }}
+              </button>
+              <span v-if="elorusSaveMessage" class="text-xs" :class="elorusSaveSuccess ? 'text-green-600' : 'text-red-500'">{{ elorusSaveMessage }}</span>
+            </div>
+            <p class="text-xs text-gray-400 mt-2">Find your API key in Elorus → User Profile. Organization ID is in your Elorus URL.</p>
+          </div>
+
           <!-- Agent contexts (collapsible) -->
           <div>
             <button
@@ -500,7 +617,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useCompanyStore } from '../stores/company'
-import { companyApi } from '../api/client'
+import { companyApi, elorusApi } from '../api/client'
 import { useToastStore } from '../stores/toast'
 
 const toastStore = useToastStore()
@@ -524,6 +641,17 @@ const editingKad = ref(false)
 const kadEditText = ref('')
 const savingKad = ref(false)
 
+// Elorus connection test (Step 2)
+const testingElorus = ref(false)
+const elorusTestResult = ref<boolean | null>(null)
+const elorusTestMessage = ref('')
+
+// Elorus save & test (Step 5 - per-company)
+const savingElorus = ref(false)
+const elorusSaveSuccess = ref(false)
+const elorusSaveMessage = ref('')
+const elorusConnected = ref(false)
+
 // Form data
 const form = ref({
   name: '',
@@ -537,6 +665,9 @@ const form = ref({
   keyProducts: [] as Array<{ name: string; description: string; price?: number | null }>,
   uniqueSellingPoints: '',
   communicationLanguage: 'Greek',
+  elorusApiKey: '',
+  elorusOrganizationId: '',
+  elorusBaseUrl: '',
 })
 
 // File state
@@ -641,6 +772,65 @@ function removeDoc(index: number) {
   documents.value.splice(index, 1)
 }
 
+async function testElorusConnection() {
+  testingElorus.value = true
+  elorusTestResult.value = null
+  elorusTestMessage.value = ''
+  try {
+    // Save the credentials first so the backend can use them
+    const activeId = companyStore.activeCompanyId
+    if (activeId) {
+      await companyApi.update({
+        elorus_api_key: form.value.elorusApiKey,
+        elorus_organization_id: form.value.elorusOrganizationId,
+        elorus_base_url: form.value.elorusBaseUrl,
+      })
+    }
+    const { data } = await elorusApi.testConnection()
+    if (data.success) {
+      elorusTestResult.value = true
+      elorusTestMessage.value = 'Connection successful!'
+    } else {
+      elorusTestResult.value = false
+      elorusTestMessage.value = data.message || 'Connection failed'
+    }
+  } catch (err: any) {
+    elorusTestResult.value = false
+    elorusTestMessage.value = err.response?.data?.message || err.message || 'Connection failed'
+  } finally {
+    testingElorus.value = false
+  }
+}
+
+async function saveElorusCreds() {
+  savingElorus.value = true
+  elorusSaveMessage.value = ''
+  elorusSaveSuccess.value = false
+  try {
+    await companyApi.update({
+      elorus_api_key: form.value.elorusApiKey,
+      elorus_organization_id: form.value.elorusOrganizationId,
+      elorus_base_url: form.value.elorusBaseUrl,
+    })
+    const { data } = await elorusApi.testConnection()
+    if (data.success) {
+      elorusSaveSuccess.value = true
+      elorusSaveMessage.value = 'Saved & connected!'
+      elorusConnected.value = true
+    } else {
+      elorusSaveSuccess.value = false
+      elorusSaveMessage.value = data.message || 'Saved but connection failed'
+      elorusConnected.value = false
+    }
+  } catch (err: any) {
+    elorusSaveSuccess.value = false
+    elorusSaveMessage.value = err.response?.data?.message || err.message || 'Failed to save'
+    elorusConnected.value = false
+  } finally {
+    savingElorus.value = false
+  }
+}
+
 async function startAnalysis() {
   goToStep(4)
   setupError.value = null
@@ -662,6 +852,9 @@ async function startAnalysis() {
     if (form.value.maxDealValue != null) fd.append('maxDealValue', String(form.value.maxDealValue))
     if (form.value.uniqueSellingPoints) fd.append('uniqueSellingPoints', form.value.uniqueSellingPoints)
     if (form.value.communicationLanguage) fd.append('communicationLanguage', form.value.communicationLanguage)
+    if (form.value.elorusApiKey) fd.append('elorusApiKey', form.value.elorusApiKey)
+    if (form.value.elorusOrganizationId) fd.append('elorusOrganizationId', form.value.elorusOrganizationId)
+    if (form.value.elorusBaseUrl) fd.append('elorusBaseUrl', form.value.elorusBaseUrl)
 
     const validProducts = form.value.keyProducts.filter(p => p.name.trim())
     if (validProducts.length > 0) {
@@ -738,6 +931,10 @@ onMounted(async () => {
     form.value.maxDealValue = p.max_deal_value ?? null
     form.value.uniqueSellingPoints = p.unique_selling_points || ''
     form.value.communicationLanguage = p.communication_language || 'Greek'
+    form.value.elorusApiKey = (p as any).elorus_api_key || ''
+    form.value.elorusOrganizationId = (p as any).elorus_organization_id || ''
+    form.value.elorusBaseUrl = (p as any).elorus_base_url || ''
+    elorusConnected.value = !!(form.value.elorusApiKey && form.value.elorusOrganizationId)
     try {
       form.value.keyProducts = JSON.parse(p.key_products || '[]')
     } catch {

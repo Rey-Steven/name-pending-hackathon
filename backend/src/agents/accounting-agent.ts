@@ -1,7 +1,8 @@
 import { BaseAgent } from './base-agent';
 import { AccountingResult, CompanyProfileContext } from '../types';
-import { LeadDB, InvoiceDB } from '../database/db';
+import { LeadDB, InvoiceDB, DealDB } from '../database/db';
 import { TaskQueue } from '../services/task-queue';
+import { getElorusService, getOrCreateElorusContact } from '../services/elorus-service';
 
 export class AccountingAgent extends BaseAgent {
   constructor(companyProfile: CompanyProfileContext | null = null) {
@@ -103,47 +104,84 @@ Generate the full invoice and accounting entries.`;
         { dealId, leadId, taskId }
       );
 
-      const invoiceNumber = await InvoiceDB.getNextInvoiceNumber();
+      // Try Elorus first
+      const companyId = this.companyProfile?.id;
+      const elorusService = companyId ? await getElorusService(companyId) : null;
 
-      const invoiceId = await InvoiceDB.create({
-        company_id: this.companyProfile?.id,
-        deal_id: dealId,
-        invoice_number: invoiceNumber,
-        invoice_date: result.data.invoiceDate,
-        due_date: result.data.dueDate,
-        customer_name: lead.company_name,
-        customer_afm: `${100000000 + Math.floor(Math.random() * 900000000)}`,
-        customer_doy: 'ΔΟΥ Αθηνών',
-        customer_address: 'Αθήνα, Ελλάδα',
-        customer_email: lead.contact_email || '',
-        line_items: JSON.stringify(result.data.lineItems),
-        subtotal: result.data.subtotal,
-        fpa_rate: result.data.fpaRate,
-        fpa_amount: result.data.fpaAmount,
-        total_amount: result.data.totalAmount,
-        payment_terms: result.data.paymentTerms,
-        status: 'draft',
-      });
+      if (elorusService) {
+        // Create Elorus invoice
+        const elorusContactId = await getOrCreateElorusContact(elorusService, lead);
 
-      await TaskQueue.complete(taskId, { invoiceId, invoiceNumber });
+        // Find 24% FPA tax
+        const taxes = await elorusService.listTaxes({ active: 'true' });
+        const fpaTax = (taxes.results || []).find(
+          (t: any) => parseFloat(t.percentage || '0') === 24
+        );
+
+        const invoice = await elorusService.createInvoice({
+          client: elorusContactId,
+          date: result.data.invoiceDate,
+          due_days: 30,
+          draft: false,
+          calculator_mode: 'initial',
+          currency_code: 'EUR',
+          items: result.data.lineItems.map((item: any) => ({
+            title: item.description,
+            quantity: String(item.quantity),
+            unit_value: String(item.unitPrice),
+            taxes: fpaTax ? [{ tax: fpaTax.id }] : [],
+          })),
+        });
+
+        // Store Elorus invoice ID on the deal
+        await DealDB.update(dealId, { elorus_invoice_id: invoice.id } as any);
+        console.log(`  📄 Elorus invoice created: ${invoice.id}`);
+
+        await TaskQueue.complete(taskId, { elorusInvoiceId: invoice.id });
+      } else {
+        // Fallback to local invoice storage
+        console.log('  ⚠️ Elorus not configured — creating local invoice record');
+
+        const invoiceNumber = await InvoiceDB.getNextInvoiceNumber();
+
+        const invoiceId = await InvoiceDB.create({
+          company_id: companyId,
+          deal_id: dealId,
+          invoice_number: invoiceNumber,
+          invoice_date: result.data.invoiceDate,
+          due_date: result.data.dueDate,
+          customer_name: lead.company_name,
+          customer_afm: lead.vat_id || `${100000000 + Math.floor(Math.random() * 900000000)}`,
+          customer_doy: lead.tax_office || 'ΔΟΥ Αθηνών',
+          customer_address: lead.address || 'Αθήνα, Ελλάδα',
+          customer_email: lead.contact_email || '',
+          line_items: JSON.stringify(result.data.lineItems),
+          subtotal: result.data.subtotal,
+          fpa_rate: result.data.fpaRate,
+          fpa_amount: result.data.fpaAmount,
+          total_amount: result.data.totalAmount,
+          payment_terms: result.data.paymentTerms,
+          status: 'draft',
+        });
+
+        await TaskQueue.complete(taskId, { invoiceId, invoiceNumber });
+      }
 
       await TaskQueue.createTask({
         sourceAgent: 'accounting',
         targetAgent: 'email',
         taskType: 'send_invoice',
-        title: `Send invoice ${invoiceNumber}: ${lead.company_name}`,
+        title: `Send invoice: ${lead.company_name}`,
         description: `Invoice amount: €${result.data.totalAmount.toFixed(2)}`,
         inputData: {
           dealId,
           leadId,
-          invoiceId,
-          invoiceNumber,
           invoiceData: result.data,
           emailType: 'invoice',
         },
         dealId,
         leadId,
-        companyId: this.companyProfile?.id,
+        companyId,
       });
 
       return result;
