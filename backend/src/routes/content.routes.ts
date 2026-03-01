@@ -28,9 +28,9 @@ function buildProfileContext(profile: any): CompanyProfileContext {
 }
 
 // GET /api/content - Get all social content drafts for active company
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const companyId = await CompanyProfileDB.getActiveId();
+    const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
     if (!companyId) return res.status(400).json({ error: 'No active company' });
     const content = await SocialContentDB.all(companyId);
     res.json(content);

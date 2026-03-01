@@ -12,7 +12,7 @@
           <span v-if="downloadingPDF">Generating...</span>
           <span v-else>Download Offer PDF</span>
         </button>
-        <router-link to="/dashboard" class="text-gray-500 hover:text-gray-700">Back to Dashboard</router-link>
+        <router-link :to="`/company/${$route.params.companyId}/dashboard`" class="text-gray-500 hover:text-gray-700">Back to Dashboard</router-link>
       </div>
     </div>
 

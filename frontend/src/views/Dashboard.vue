@@ -238,7 +238,7 @@
       </div>
       <p v-else class="p-8 text-center text-gray-400">
         No leads yet.
-        <router-link to="/leads/new" class="text-blue-600 hover:underline">Create one</router-link>
+        <router-link :to="`/company/${$route.params.companyId}/leads/new`" class="text-blue-600 hover:underline">Create one</router-link>
       </p>
     </div>
   </div>

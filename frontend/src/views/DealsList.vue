@@ -72,7 +72,7 @@
             <td class="px-4 py-3 text-gray-500 text-sm">{{ formatDate(deal.created_at) }}</td>
             <td class="px-4 py-3">
               <router-link
-                :to="`/deals/${deal.id}`"
+                :to="`/company/${$route.params.companyId}/deals/${deal.id}`"
                 class="text-blue-600 hover:text-blue-800 text-sm font-medium"
               >
                 View

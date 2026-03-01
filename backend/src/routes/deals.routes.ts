@@ -7,9 +7,9 @@ import { broadcastEvent } from './dashboard.routes';
 const router = Router();
 
 // GET /api/deals - Get all deals
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const companyId = await CompanyProfileDB.getActiveId();
+    const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
     if (!companyId) return res.status(400).json({ error: 'No active company' });
     const deals = await DealDB.all(companyId);
     res.json(deals);
@@ -108,9 +108,9 @@ router.post('/:id/check-reply', async (req: Request, res: Response) => {
 });
 
 // GET /api/deals/pending-offers - List all offers awaiting approval
-router.get('/pending-offers', async (_req: Request, res: Response) => {
+router.get('/pending-offers', async (req: Request, res: Response) => {
   try {
-    const companyId = await CompanyProfileDB.getActiveId();
+    const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
     if (!companyId) return res.status(400).json({ error: 'No active company' });
 
     const offers = await PendingOfferDB.allPending(companyId);

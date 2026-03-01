@@ -685,7 +685,8 @@ async function saveKadCodes() {
 }
 
 function goToDashboard() {
-  router.push('/dashboard')
+  const id = companyStore.activeCompanyId
+  router.push(id ? `/company/${id}/dashboard` : '/setup')
 }
 
 // On mount: pre-fill if editing an existing company

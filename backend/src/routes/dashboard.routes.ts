@@ -8,9 +8,9 @@ const router = Router();
 const sseClients: Set<Response> = new Set();
 
 // GET /api/dashboard/stats - Dashboard statistics
-router.get('/stats', async (_req: Request, res: Response) => {
+router.get('/stats', async (req: Request, res: Response) => {
   try {
-    const companyId = await CompanyProfileDB.getActiveId();
+    const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
     if (!companyId) return res.status(400).json({ error: 'No active company' });
     const [leads, deals, tasks, invoices, emails, research, content] = await Promise.all([
       LeadDB.all(companyId),

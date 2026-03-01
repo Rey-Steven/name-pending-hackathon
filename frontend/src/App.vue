@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-gray-50">
     <!-- Navigation — hidden on the setup page -->
-    <nav v-if="!isSetupPage" class="bg-white shadow-sm border-b">
+    <nav v-if="!isSetupPage" class="bg-white shadow-sm border-b relative">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16">
 
@@ -100,10 +100,10 @@
               <!-- Simple link (no children) -->
               <router-link
                 v-if="!item.children"
-                :to="item.path || '/'"
+                :to="companyPath(item.subpath || '')"
                 :class="[
                   'px-3 py-2 rounded-md text-sm font-medium',
-                  item.path && route.path.startsWith(item.path)
+                  item.subpath && route.path.includes(item.subpath)
                     ? 'bg-gray-100 text-gray-900'
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 ]"
@@ -133,12 +133,12 @@
                 >
                   <router-link
                     v-for="child in item.children"
-                    :key="child.path"
-                    :to="child.path"
+                    :key="child.subpath"
+                    :to="companyPath(child.subpath)"
                     @click="openDropdown = null"
                     :class="[
                       'block px-4 py-2 text-sm',
-                      route.path.startsWith(child.path)
+                      route.path.includes(child.subpath)
                         ? 'bg-gray-50 text-gray-900 font-medium'
                         : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                     ]"
@@ -157,7 +157,7 @@
               Help
             </router-link>
             <router-link
-              to="/leads/new"
+              :to="companyPath('leads/new')"
               class="px-4 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
             >
               + New Lead
@@ -194,24 +194,33 @@
           </div>
         </div>
       </div>
+
+      <!-- Company switch loading bar -->
+      <div
+        v-if="companyStore.isLoading"
+        class="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"
+      >
+        <div class="h-full w-1/3 bg-blue-500 rounded-full animate-loading-bar" />
+      </div>
     </nav>
 
     <!-- Main content -->
     <main :class="isSetupPage ? '' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'">
-      <router-view :key="isSetupPage ? 'setup' : (companyStore.activeCompanyId ?? 'default')" />
+      <router-view :key="isSetupPage ? 'setup' : (String(route.params.companyId || 'default'))" />
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useCompanyStore } from './stores/company'
 
 const route = useRoute()
+const router = useRouter()
 const companyStore = useCompanyStore()
 
-const isSetupPage = computed(() => route.path === '/setup')
+const isSetupPage = computed(() => route.path === '/setup' || route.path.startsWith('/setup'))
 const switcherOpen = ref(false)
 const switcherRef = ref<HTMLElement | null>(null)
 const settingsOpen = ref(false)
@@ -221,6 +230,12 @@ const companyInitials = computed(() => {
   const name = companyStore.profile?.name || ''
   return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'A'
 })
+
+function companyPath(subpath: string): string {
+  const id = companyStore.activeCompanyId
+  if (!id) return '/setup'
+  return `/company/${id}/${subpath}`
+}
 
 function toggleSwitcher() {
   switcherOpen.value = !switcherOpen.value
@@ -239,6 +254,11 @@ async function switchCompany(id: string) {
   }
   await companyStore.activateCompany(id)
   switcherOpen.value = false
+  // Navigate to the same sub-page under the new company
+  const currentPath = route.path
+  const match = currentPath.match(/^\/company\/[^/]+\/(.+)$/)
+  const subpath = match ? match[1] : 'dashboard'
+  router.push(`/company/${id}/${subpath}`)
 }
 
 async function removeCompany(id: string) {
@@ -252,28 +272,28 @@ async function removeCompany(id: string) {
 
 // --- Navigation ---
 
-interface NavChild { label: string; path: string }
-interface NavItem { label: string; path?: string; children?: NavChild[] }
+interface NavChild { label: string; subpath: string }
+interface NavItem { label: string; subpath?: string; children?: NavChild[] }
 
 const navItems: NavItem[] = [
-  { label: 'Dashboard', path: '/dashboard' },
+  { label: 'Dashboard', subpath: 'dashboard' },
   { label: 'Sales', children: [
-    { label: 'Leads', path: '/leads' },
-    { label: 'Deals', path: '/deals' },
+    { label: 'Leads', subpath: 'leads' },
+    { label: 'Deals', subpath: 'deals' },
   ]},
   { label: 'Marketing', children: [
-    { label: 'Research', path: '/research' },
-    { label: 'Content', path: '/content' },
+    { label: 'Research', subpath: 'research' },
+    { label: 'Content', subpath: 'content' },
   ]},
   { label: 'Accounting', children: [
-    { label: 'Invoices', path: '/invoices' },
+    { label: 'Invoices', subpath: 'invoices' },
   ]},
   { label: 'Legal', children: [
-    { label: 'Contracts', path: '/legal/contracts' },
+    { label: 'Contracts', subpath: 'legal/contracts' },
   ]},
   { label: 'Operations', children: [
-    { label: 'Tasks', path: '/tasks' },
-    { label: 'Emails', path: '/emails' },
+    { label: 'Tasks', subpath: 'tasks' },
+    { label: 'Emails', subpath: 'emails' },
   ]},
 ]
 
@@ -289,7 +309,7 @@ function toggleDropdown(label: string) {
 }
 
 function isDepartmentActive(item: NavItem): boolean {
-  return (item.children || []).some(c => route.path.startsWith(c.path))
+  return (item.children || []).some(c => route.path.includes(c.subpath))
 }
 
 // --- Click outside ---
@@ -319,3 +339,13 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', onClickOutside)
 })
 </script>
+
+<style>
+@keyframes loading-bar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+.animate-loading-bar {
+  animation: loading-bar 1.2s ease-in-out infinite;
+}
+</style>

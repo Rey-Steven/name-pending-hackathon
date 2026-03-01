@@ -11,7 +11,7 @@
           {{ workflowRunning ? 'Running...' : `Run Workflow (${selectedIds.size})` }}
         </button>
         <router-link
-          to="/leads/new"
+          :to="`/company/${$route.params.companyId}/leads/new`"
           class="px-4 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
         >
           + New Lead

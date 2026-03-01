@@ -25,6 +25,16 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// Extract company ID from frontend header so each request is pinned to the
+// company the UI intended, avoiding race conditions during company switching.
+app.use('/api', (req, _res, next) => {
+  const companyId = req.headers['x-company-id'];
+  if (typeof companyId === 'string' && companyId) {
+    (req as any).companyId = companyId;
+  }
+  next();
+});
+
 // Serve uploaded files (logos, documents)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 

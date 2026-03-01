@@ -4,9 +4,9 @@ import { InvoiceDB, CompanyProfileDB } from '../database/db';
 const router = Router();
 
 // GET /api/invoices - Get all invoices
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const companyId = await CompanyProfileDB.getActiveId();
+    const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
     if (!companyId) return res.status(400).json({ error: 'No active company' });
     const invoices = await InvoiceDB.all(companyId);
     res.json(invoices);

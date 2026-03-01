@@ -37,9 +37,9 @@ async function getEmailAgent(): Promise<{ agent: EmailAgent; companyId: string |
 }
 
 // GET /api/emails - Get all sent emails from our database
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const companyId = await CompanyProfileDB.getActiveId();
+    const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
     if (!companyId) return res.status(400).json({ error: 'No active company' });
     const emails = await EmailDB.all(companyId);
     res.json(emails);
@@ -74,9 +74,9 @@ router.get('/unread', async (_req: Request, res: Response) => {
 });
 
 // GET /api/emails/threads - Get email threads grouped by deal
-router.get('/threads', async (_req: Request, res: Response) => {
+router.get('/threads', async (req: Request, res: Response) => {
   try {
-    const companyId = await CompanyProfileDB.getActiveId();
+    const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
     if (!companyId) return res.status(400).json({ error: 'No active company' });
     const allEmails = await EmailDB.all(companyId);
 

@@ -23,21 +23,27 @@ import LegalContracts from './views/LegalContracts.vue'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: '/dashboard' },
+    { path: '/', redirect: '/setup' },
     { path: '/setup', component: CompanySetup },
     { path: '/settings', component: Settings },
-    { path: '/dashboard', component: Dashboard },
-    { path: '/leads', component: LeadsList },
-    { path: '/leads/new', component: LeadForm },
-    { path: '/deals', component: DealsList },
-    { path: '/deals/:id', component: DealView },
     { path: '/help', component: HelpCenter },
-    { path: '/tasks', component: TasksList },
-    { path: '/invoices', component: InvoicesList },
-    { path: '/emails', component: EmailsView },
-    { path: '/research', component: MarketResearchView },
-    { path: '/content', component: SocialContentView },
-    { path: '/legal/contracts', component: LegalContracts },
+    {
+      path: '/company/:companyId',
+      children: [
+        { path: '', redirect: { name: 'dashboard' } },
+        { path: 'dashboard', name: 'dashboard', component: Dashboard },
+        { path: 'leads', name: 'leads', component: LeadsList },
+        { path: 'leads/new', name: 'lead-new', component: LeadForm },
+        { path: 'deals', name: 'deals', component: DealsList },
+        { path: 'deals/:id', name: 'deal', component: DealView },
+        { path: 'tasks', name: 'tasks', component: TasksList },
+        { path: 'invoices', name: 'invoices', component: InvoicesList },
+        { path: 'emails', name: 'emails', component: EmailsView },
+        { path: 'research', name: 'research', component: MarketResearchView },
+        { path: 'content', name: 'content', component: SocialContentView },
+        { path: 'legal/contracts', name: 'legal-contracts', component: LegalContracts },
+      ],
+    },
   ],
 })
 
@@ -53,18 +59,37 @@ let setupChecked = false
 
 router.beforeEach(async (to) => {
   // Always allow access to setup, settings, and help pages
-  if (to.path === '/setup' || to.path === '/settings' || to.path === '/help') return true
+  if (to.path === '/setup' || to.path.startsWith('/setup') || to.path === '/settings' || to.path === '/help') return true
 
-  // Only check once per session to avoid repeated API calls
+  const companyStore = useCompanyStore()
+
+  // One-time setup check on first navigation
   if (!setupChecked) {
-    const companyStore = useCompanyStore()
     const isSetup = await companyStore.checkSetupStatus()
     setupChecked = true
     if (!isSetup) {
       return '/setup'
     }
-    // Preload profile for nav bar display
     await companyStore.fetchProfile()
+  }
+
+  // If navigating to root, redirect to active company's dashboard
+  if (to.path === '/') {
+    if (companyStore.activeCompanyId) {
+      return `/company/${companyStore.activeCompanyId}/dashboard`
+    }
+    return '/setup'
+  }
+
+  // If navigating to a company route, sync the store with the URL's company ID
+  const companyId = to.params.companyId as string | undefined
+  if (companyId && companyId !== companyStore.activeCompanyId) {
+    try {
+      await companyStore.activateCompany(companyId)
+    } catch {
+      // Invalid company ID — redirect to setup
+      return '/setup'
+    }
   }
 
   return true

@@ -5,9 +5,9 @@ import { CreateLeadRequest } from '../types';
 const router = Router();
 
 // GET /api/leads - Get all leads
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const companyId = await CompanyProfileDB.getActiveId();
+    const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
     if (!companyId) return res.status(400).json({ error: 'No active company' });
     const leads = await LeadDB.all(companyId);
     res.json(leads);
@@ -38,7 +38,7 @@ router.post('/', async (req: Request<{}, {}, CreateLeadRequest>, res: Response) 
       return res.status(400).json({ error: 'companyName and contactName are required' });
     }
 
-    const companyId = await CompanyProfileDB.getActiveId();
+    const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
     if (!companyId) return res.status(400).json({ error: 'No active company' });
 
     const leadId = await LeadDB.create({

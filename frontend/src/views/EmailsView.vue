@@ -152,7 +152,7 @@
             <!-- View Deal link -->
             <div class="px-5 py-2 border-t bg-white text-right">
               <router-link
-                :to="`/deals/${thread.deal_id}`"
+                :to="`/company/${$route.params.companyId}/deals/${thread.deal_id}`"
                 class="text-sm text-blue-600 hover:text-blue-800 font-medium"
               >
                 View Deal &rarr;

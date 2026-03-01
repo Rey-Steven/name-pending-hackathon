@@ -4,9 +4,9 @@ import { TaskDB, CompanyProfileDB } from '../database/db';
 const router = Router();
 
 // GET /api/tasks - Get all tasks
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const companyId = await CompanyProfileDB.getActiveId();
+    const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
     if (!companyId) return res.status(400).json({ error: 'No active company' });
     const tasks = await TaskDB.all(companyId);
     res.json(tasks);
@@ -31,7 +31,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 // GET /api/tasks/agent/:agentType - Get pending tasks for an agent
 router.get('/agent/:agentType', async (req: Request, res: Response) => {
   try {
-    const companyId = await CompanyProfileDB.getActiveId();
+    const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
     if (!companyId) return res.status(400).json({ error: 'No active company' });
     const tasks = await TaskDB.findPending(req.params.agentType, companyId);
     res.json(tasks);

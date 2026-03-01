@@ -1,8 +1,23 @@
 import axios from 'axios'
+import { useCompanyStore } from '../stores/company'
 
 const api = axios.create({
   baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
+})
+
+// Attach the active company ID to every request so the backend
+// always knows which company the frontend intended.
+api.interceptors.request.use((config) => {
+  try {
+    const companyStore = useCompanyStore()
+    if (companyStore.activeCompanyId) {
+      config.headers['X-Company-Id'] = companyStore.activeCompanyId
+    }
+  } catch {
+    // Store may not be initialized yet (e.g., during setup)
+  }
+  return config
 })
 
 export const leadsApi = {

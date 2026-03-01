@@ -75,7 +75,7 @@
           <span v-if="submitting">Creating...</span>
           <span v-else>Create Lead & Run Agents</span>
         </button>
-        <router-link to="/dashboard" class="text-gray-500 hover:text-gray-700">
+        <router-link :to="`/company/${$route.params.companyId}/dashboard`" class="text-gray-500 hover:text-gray-700">
           Cancel
         </router-link>
       </div>
@@ -87,11 +87,12 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { leadsApi, workflowApi } from '../api/client'
 import { useDashboardStore } from '../stores/dashboard'
 
 const router = useRouter()
+const route = useRoute()
 const store = useDashboardStore()
 
 const submitting = ref(false)
@@ -116,7 +117,7 @@ async function submitLead() {
     const leadId = res.data.id
 
     // 2. Navigate to dashboard
-    router.push('/dashboard')
+    router.push(`/company/${route.params.companyId}/dashboard`)
 
     // 3. Start workflow (agents process the lead)
     store.setWorkflowRunning(leadId)

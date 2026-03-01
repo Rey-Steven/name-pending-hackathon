@@ -28,9 +28,9 @@ function buildProfileContext(profile: any): CompanyProfileContext {
 }
 
 // GET /api/research - Get all market research for active company
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const companyId = await CompanyProfileDB.getActiveId();
+    const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
     if (!companyId) return res.status(400).json({ error: 'No active company' });
     const research = await MarketResearchDB.all(companyId);
     res.json(research);
@@ -40,9 +40,9 @@ router.get('/', async (_req: Request, res: Response) => {
 });
 
 // GET /api/research/latest - Get most recent completed research
-router.get('/latest', async (_req: Request, res: Response) => {
+router.get('/latest', async (req: Request, res: Response) => {
   try {
-    const companyId = await CompanyProfileDB.getActiveId();
+    const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
     if (!companyId) return res.status(400).json({ error: 'No active company' });
     const research = await MarketResearchDB.getLatest(companyId);
     if (!research) return res.status(404).json({ error: 'No completed research found' });
@@ -64,12 +64,12 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // POST /api/research/trigger - Manually trigger market research
-router.post('/trigger', async (_req: Request, res: Response) => {
+router.post('/trigger', async (req: Request, res: Response) => {
   try {
     const profile = await CompanyProfileDB.get();
     if (!profile) return res.status(400).json({ error: 'No company profile configured' });
 
-    const companyId = await CompanyProfileDB.getActiveId();
+    const companyId = (req as any).companyId || await CompanyProfileDB.getActiveId();
     if (companyId) {
       const running = await MarketResearchDB.hasRunning(companyId);
       if (running) return res.status(409).json({ error: 'Research is already running' });
