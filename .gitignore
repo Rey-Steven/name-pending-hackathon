@@ -37,3 +37,9 @@ temp/
 
 # Uploaded files (runtime artifacts — not source code)
 backend/uploads/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
