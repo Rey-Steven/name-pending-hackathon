@@ -4,7 +4,7 @@ import { LegalAgent } from '../agents/legal-agent';
 import { AccountingAgent } from '../agents/accounting-agent';
 import { EmailAgent } from '../agents/email-agent';
 import { TaskQueue } from './task-queue';
-import { DealDB, LeadDB, AuditLog, CompanyProfileDB, AppSettingsDB, PendingOfferDB, Lead } from '../database/db';
+import { DealDB, LeadDB, EmailDB, AuditLog, CompanyProfileDB, AppSettingsDB, PendingOfferDB, Lead } from '../database/db';
 import { generateOfferPDF } from './pdf-generator';
 import { broadcastEvent } from '../routes/dashboard.routes';
 import { CompanyProfileContext } from '../types';
@@ -214,10 +214,18 @@ export class WorkflowEngine {
       return { status: 'waiting', dealId, message: 'No customer reply found yet' };
     }
 
+    // Guard: if this message_id was already stored (processed for any deal), skip it.
+    // This prevents the same reply from triggering multiple deals when the same
+    // email address is a contact across several leads.
+    const alreadyProcessed = await EmailDB.findByMessageId(reply.messageId);
+    if (alreadyProcessed) {
+      return { status: 'waiting', dealId, message: 'Reply already processed for another deal' };
+    }
+
     console.log(`\n  📬 Reply from ${reply.from}: "${reply.subject}"`);
     console.log(`     Preview: ${reply.body.slice(0, 120)}...`);
 
-    // Store inbound reply (deduplicate by message_id)
+    // Store inbound reply before processing so concurrent polls can't double-process
     await emailAgent.storeInboundReply(reply, dealId);
 
     const roundNumber = (deal.negotiation_round || 0) + 1;

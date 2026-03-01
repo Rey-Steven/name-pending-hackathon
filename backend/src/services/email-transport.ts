@@ -301,7 +301,7 @@ export async function fetchRepliesForDeal(dealId: string): Promise<InboxEmail | 
     const emailTime = new Date(email.date).getTime();
     const isNewer = emailTime > lastSentTime;
 
-    return (fromRecipient || subjectMatch) && isNewer;
+    return fromRecipient && subjectMatch && isNewer;
   });
 
   // Return the most recent matching reply

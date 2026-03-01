@@ -2,6 +2,14 @@
   <div>
     <PageHeader title="Leads" :subtitle="`${filteredLeads.length} leads`">
       <template #actions>
+        <button
+          v-if="selectedIds.size > 0"
+          @click="runWorkflows"
+          :disabled="workflowRunning"
+          class="px-4 py-2 rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {{ workflowRunning ? 'Running...' : `Run Workflow (${selectedIds.size})` }}
+        </button>
         <router-link
           to="/leads/new"
           class="px-4 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
@@ -47,6 +55,14 @@
       <table class="w-full min-w-full">
         <thead class="bg-gray-50">
           <tr>
+            <th class="px-4 py-3 w-8">
+              <input
+                type="checkbox"
+                :checked="allFilteredSelected"
+                @change="toggleSelectAll"
+                class="rounded border-gray-300 text-blue-600 cursor-pointer"
+              />
+            </th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Industry</th>
@@ -56,9 +72,27 @@
           </tr>
         </thead>
         <tbody class="divide-y">
-          <tr v-for="lead in filteredLeads" :key="lead.id" class="hover:bg-gray-50">
+          <tr
+            v-for="lead in filteredLeads"
+            :key="lead.id"
+            class="hover:bg-gray-50"
+            :class="{ 'bg-blue-50': selectedIds.has(lead.id) }"
+          >
+            <td class="px-4 py-3 w-8">
+              <input
+                type="checkbox"
+                :checked="selectedIds.has(lead.id)"
+                @change="toggleSelect(lead.id)"
+                class="rounded border-gray-300 text-blue-600 cursor-pointer"
+              />
+            </td>
             <td class="px-4 py-3">
-              <div class="font-medium text-gray-900">{{ lead.company_name }}</div>
+              <div class="font-medium text-gray-900 flex items-center gap-2">
+                {{ lead.company_name }}
+                <span v-if="workflowResults[lead.id]" :class="resultClass(lead.id)" class="text-xs font-medium px-1.5 py-0.5 rounded">
+                  {{ workflowResults[lead.id] }}
+                </span>
+              </div>
               <div v-if="lead.company_website" class="text-xs text-gray-400">{{ lead.company_website }}</div>
             </td>
             <td class="px-4 py-3">
@@ -91,12 +125,28 @@
     <div v-else class="bg-white rounded-lg shadow p-8 text-center text-gray-400">
       No leads match your filters.
     </div>
+
+    <!-- Workflow progress log -->
+    <div v-if="progressLog.length" class="mt-4 bg-gray-900 rounded-lg p-4 text-sm font-mono max-h-64 overflow-y-auto">
+      <div
+        v-for="(line, i) in progressLog"
+        :key="i"
+        :class="{
+          'text-green-400': line.type === 'success',
+          'text-red-400': line.type === 'error',
+          'text-yellow-400': line.type === 'running',
+          'text-gray-400': line.type === 'info',
+        }"
+      >
+        {{ line.text }}
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { leadsApi } from '../api/client'
+import { leadsApi, workflowApi } from '../api/client'
 import { formatDate } from '../utils/format'
 import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -106,6 +156,11 @@ const loading = ref(true)
 const search = ref('')
 const statusFilter = ref('')
 const scoreFilter = ref('')
+
+const selectedIds = ref<Set<string>>(new Set())
+const workflowRunning = ref(false)
+const workflowResults = ref<Record<string, string>>({})
+const progressLog = ref<Array<{ text: string; type: 'info' | 'running' | 'success' | 'error' }>>([])
 
 const filteredLeads = computed(() => {
   let result = leads.value
@@ -124,6 +179,78 @@ const filteredLeads = computed(() => {
   }
   return result
 })
+
+const allFilteredSelected = computed(() =>
+  filteredLeads.value.length > 0 && filteredLeads.value.every(l => selectedIds.value.has(l.id))
+)
+
+function toggleSelect(id: string) {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+
+function toggleSelectAll() {
+  if (allFilteredSelected.value) {
+    const next = new Set(selectedIds.value)
+    filteredLeads.value.forEach(l => next.delete(l.id))
+    selectedIds.value = next
+  } else {
+    const next = new Set(selectedIds.value)
+    filteredLeads.value.forEach(l => next.add(l.id))
+    selectedIds.value = next
+  }
+}
+
+function resultClass(id: string) {
+  const r = workflowResults.value[id]
+  if (r === 'running') return 'bg-yellow-100 text-yellow-800'
+  if (r === 'done') return 'bg-green-100 text-green-800'
+  if (r === 'error') return 'bg-red-100 text-red-800'
+  return ''
+}
+
+function log(text: string, type: 'info' | 'running' | 'success' | 'error' = 'info') {
+  progressLog.value.push({ text, type })
+}
+
+async function runWorkflows() {
+  if (workflowRunning.value) return
+
+  const ids = [...selectedIds.value]
+  workflowRunning.value = true
+  workflowResults.value = {}
+  progressLog.value = []
+
+  log(`Starting workflow for ${ids.length} lead(s)...`, 'info')
+
+  for (const id of ids) {
+    const lead = leads.value.find(l => l.id === id)
+    const name = lead?.company_name ?? id
+
+    workflowResults.value = { ...workflowResults.value, [id]: 'running' }
+    log(`  → ${name}`, 'running')
+
+    try {
+      await workflowApi.start(id)
+      workflowResults.value = { ...workflowResults.value, [id]: 'done' }
+      log(`  ✓ ${name} — workflow started`, 'success')
+    } catch (err: any) {
+      workflowResults.value = { ...workflowResults.value, [id]: 'error' }
+      log(`  ✗ ${name} — ${err?.response?.data?.error ?? err.message}`, 'error')
+    }
+  }
+
+  log(`Done.`, 'info')
+  workflowRunning.value = false
+
+  // Refresh lead statuses
+  try {
+    const res = await leadsApi.getAll()
+    leads.value = res.data
+  } catch {}
+}
 
 onMounted(async () => {
   try {
